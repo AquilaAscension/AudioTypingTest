@@ -7,3 +7,4 @@ for time         - use time
 library ideas to look into:
         - spell check/grammar
         - SQL (for storing and analyzing user typing data)
+        - sentence generator/dictionary?
