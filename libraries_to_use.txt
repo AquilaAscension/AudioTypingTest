@@ -1,0 +1,4 @@
+for gui - use tkinter
+for tts - use gTTS (Google TTS) at first
+        - try using Piper TTS down the line (available at: https://github.com/rhasspy/piper)
+            * Piper allows for voice model training
