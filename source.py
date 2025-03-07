@@ -106,8 +106,90 @@ class AudioTypingTest:
         tk.Label(self.root, text="Audio Typing Test", font=("Times New Roman", 16, "bold")).grid(row=0, column=1, pady=10, sticky="n")
 
         # Sidebar
-        self.sidebar = tk.Frame(self.root, bg="#ddd", width=150)
-        self.sidebar.grid(row=0, column=0, rowspan=3, sticky="ns")
+        self.sidebar = tk.Frame(self.root, bg="#ddd", width=500)
+        self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsw")
+
+        #Sidebar contents
+        #Settings label
+        self.settings_label = tk.Label(self.sidebar, text='Settings', font=("Times New Roman", 14))
+        self.settings_label.grid(row=0,column=0,padx=10,pady=10,sticky="new")
+
+        #Distortion
+        #Label
+        self.distortion_label = tk.Label(self.sidebar, text='Distortion:', font=("Times New Roman", 12))
+        self.distortion_label.grid(row=1,column=0,padx=10,pady=10,sticky="w")
+        
+        #Variable
+        self.distortion_status = StringVar()
+        
+        #On
+        self.distortion_on = tk.Radiobutton(self.sidebar, text="On", variable=self.distortion_status, value="on_distortion")
+        self.distortion_on.grid(row=2,column=0,padx=10,pady=0,sticky="ew")
+        
+
+        #Off
+        self.distortion_off = tk.Radiobutton(self.sidebar, text="Off", variable=self.distortion_status, value="off_distortion")
+        self.distortion_off.grid(row=3,column=0,padx=10,pady=0,sticky="ew")
+
+        #Set Default State
+        self.distortion_status.set("off_distortion")
+
+        #Show Text Box
+        #Label
+        self.show_text_box_label = tk.Label(self.sidebar, text="Show Text Box:", font=("Times New Roman", 12))
+        self.show_text_box_label.grid(row=4,column=0,padx=10,pady=10,sticky="ew")
+        
+
+        #Variable
+        self.text_box_status = StringVar()
+        
+        #On
+        self.text_box_on = tk.Radiobutton(self.sidebar, text="Yes", variable=self.text_box_status, value="on_text_box")
+        self.text_box_on.grid(row=5,column=0,padx=10,pady=0,sticky="ew")
+        
+        #Off
+        self.text_box_on = tk.Radiobutton(self.sidebar, text="No", variable=self.text_box_status, value="off_text_box")
+        self.text_box_on.grid(row=6,column=0,padx=10,pady=0,sticky="ew")
+
+        #Set Default State
+        self.text_box_status.set("on_text_box")
+        
+        #Additional Settings can go here if necisary
+        
+
+        #Sign in
+        #Username
+        #Label
+        self.username_label = tk.Label(self.sidebar, text="Username:")
+        self.username_label.grid(row=7,column=0,padx=10,pady=10,sticky="esw")
+        
+        #Variable
+        self.username_value = StringVar()
+        #Entry Box
+        self.username_entry = ttk.Entry(self.sidebar, textvariable=self.username_value)
+        self.username_entry.grid(row=8,column=0,padx=10,pady=0,sticky="esw")
+
+        #Password
+        #Label
+        self.password_label = tk.Label(self.sidebar, text="Password:")
+        self.password_label.grid(row=9,column=0,padx=10,pady=10,sticky="esw")
+        
+        #Variable
+        self.password_value = StringVar()
+        #Entry Box
+        self.password_entry = ttk.Entry(self.sidebar, textvariable=self.password_value, show="*")
+        self.password_entry.grid(row=10,column=0,padx=10,pady=0,sticky="esw")
+
+        #Sign In Button
+        self.sign_in_button = tk.Button(self.sidebar, text="Sign In", command=self.sign_in)
+        self.sign_in_button.grid(row=11,column=0,padx=10,pady=0,sticky="esw")
+
+        
+
+
+
+
+
 
         # Submit Button
         self.submit_button = tk.Button(self.root, text="Submit", command=self.submit_text)
@@ -124,6 +206,16 @@ class AudioTypingTest:
         # Play Button
         self.play_button = tk.Button(self.root, text="\u25B6", font=("Arial", 14), command=self.resume_progress_bar)
         self.play_button.grid(row=0, column=2, padx=10, pady=10, sticky="w")
+        
+
+    #placeholder function for sign in
+    def sign_in(self):
+        return "0"
+
+
+
+
+
 
     def get_audio_duration(self):
         """
