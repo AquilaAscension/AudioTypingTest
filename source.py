@@ -1,6 +1,47 @@
 from tkinter import *
 import tkinter as tk
 from tkinter import ttk
+from gtts import gTTS
+from mutagen.mp3 import MP3
+from playsound3 import playsound
+import os
+
+class ttsManager:
+    def __init__(self,root):
+        self.root = root
+        self.TTSDuration = 0
+        self.filename = 'TypingTTS.mp3'
+        self.typingText = "This is example text."
+
+
+    #we will later add a function to generate the text to type
+    
+    #Function to get the typing text
+    def getTypingText(self):
+        return self.typingText
+    
+    #Function to get the duration of the tts
+    def getTTSDuration(self):
+        return self.TTSDuration
+
+    #function to delete tts file
+    def deleteTTSFile(self):
+        os.remove(self.filename)
+
+    #make tts file from input text, and update tts duration
+    def TTSGenerate(self,input_text):
+        tts_file = gTTS(input_text, lang='en')
+        tts_file.save(self.filename)
+        file_generated = MP3(self.filename)
+        self.TTSDuration = file_generated.info.length
+        
+    def playTTS(self):
+        playsound(self.filename)
+        
+
+
+
+
 
 class ProgressBarManager:
     def __init__(self, root, audio_duration):
@@ -10,12 +51,13 @@ class ProgressBarManager:
         self.increment = 100 / (self.audio_duration * 1000 / self.update_interval)  # Calculate increment per update
         self.progress_value = 0  # Track the progress bar value
         self.timer_id = None  # Track the timer ID
-        self.is_paused = False
+        self.is_paused = True
 
         # Create the progress bar
         self.progress_bar = ttk.Progressbar(self.root, orient="horizontal", length=400, mode="determinate")
         self.progress_bar.grid(row=0, column=1, pady=10, sticky="s")
         self.progress_bar["maximum"] = 100  # Set a maximum value for the progress bar
+
 
     def update_progress_bar(self):
         if not self.is_paused and self.progress_value < 100:  # so the progress bar doesn't exceed 100%, also check if paused
@@ -28,7 +70,7 @@ class ProgressBarManager:
             self.root.after_cancel(self.timer_id)
         self.progress_value = 0  # Reset progress value
         self.progress_bar["value"] = 0  # Reset progress bar
-        self.is_paused = False
+        self.is_paused = True  #Default this to true
         self.update_progress_bar()  # Start updating the progress bar
 
     def reset_progress_bar(self):
@@ -87,6 +129,7 @@ class AudioTypingTest:
         self.setup_ui()
 
         # Initialize managers
+        self.tts_manager = ttsManager(self.root)
         self.progress_bar_manager = ProgressBarManager(self.root, self.get_audio_duration())
         self.text_manager = TextManager(self.root)
 
@@ -235,7 +278,7 @@ class AudioTypingTest:
         wpm = word_count / minutes if minutes > 0 else 0   #Pepare WPM to display
 
         # Calculate Accuracy
-        reference_text = "Audio transcript is not ready."
+        reference_text = self.tts_manager.getTypingText()
         user_words = user_text.split()
         reference_words = reference_text.split() #Audio Transcript
         correct_words = sum(1 for u, r in zip(user_words, reference_words) if u == r)
@@ -261,9 +304,16 @@ class AudioTypingTest:
 
     def pause_progress_bar(self):
         self.progress_bar_manager.pause_progress_bar()  # Pause the progress bar
+        self.tts_manager.deleteTTSFile()
 
     def resume_progress_bar(self):
         self.progress_bar_manager.resume_progress_bar()  # Resume the progress bar
+        self.tts_manager.TTSGenerate(self.tts_manager.getTypingText())
+        self.tts_manager.playTTS()
+        
+
+
+
 
 
 # Create the main window

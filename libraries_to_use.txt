@@ -1,10 +1,16 @@
 for gui          - use tkinter
 for tts          - use gTTS (Google TTS) at first
+                 - mutagen to get tts file duration
+                 - playsound3 to play the audio
                  - try using Piper TTS down the line (available at: https://github.com/rhasspy/piper)
                         * Piper allows for voice model training
 for time         - use time
 
+
+
+
 library ideas to look into:
+        - we may need a mutithreading library to play sound while still allowing the user to type
         - spell check/grammar
         - SQL (for storing and analyzing user typing data)
         - sentence generator/dictionary?
