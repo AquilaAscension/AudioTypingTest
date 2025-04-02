@@ -222,14 +222,25 @@ class AudioTypingTest:
         This function will return the duration of the audio file.
         For now, it returns a default value of 60 seconds.
         """
-        return 60  # Default duration in seconds
+        return 20  # Default duration in seconds
 
     def submit_text(self):
         user_text = self.text_manager.get_text()  # Get text from the typing box
 
         # Calculate word count
         word_count = len(user_text.split())
-        results = f"You typed {word_count} words."  # Prepare results to display
+
+        #Calculate words per minute
+        minutes = self.get_audio_duration() / 60
+        wpm = word_count / minutes if minutes > 0 else 0   #Pepare WPM to display
+
+        # Calculate Accuracy
+        reference_text = "Audio transcript is not ready."
+        user_words = user_text.split()
+        reference_words = reference_text.split() #Audio Transcript
+        correct_words = sum(1 for u, r in zip(user_words, reference_words) if u == r)
+        accuracy = (correct_words / word_count) * 100
+        results = f"You typed {word_count} words.\nWords per Minute: {wpm:.2f}\nAccuracy: {accuracy: .2f}" #Accuracy will be added later
 
         # Hide the progress bar and show the results label
         self.progress_bar_manager.hide_progress_bar()
@@ -238,8 +249,8 @@ class AudioTypingTest:
         # Clear the typing box
         self.text_manager.clear_text()
 
-        # After 2 seconds, hide the label and show the progress bar again
-        self.root.after(2000, self.reset_ui)
+        # After 5 seconds, hide the label and show the progress bar again
+        self.root.after(5000, self.reset_ui)
 
     def reset_ui(self):
         self.text_manager.hide_results()  # Hide the results label
