@@ -1,3 +1,4 @@
+import threading
 from tkinter import *
 import tkinter as tk
 from tkinter import ttk
@@ -7,48 +8,41 @@ from playsound3 import playsound
 import os
 
 class ttsManager:
-    def __init__(self,root):
+    def __init__(self, root):
         self.root = root
         self.TTSDuration = 0
         self.filename = 'TypingTTS.mp3'
         self.typingText = "This is example text."
 
-
-    #we will later add a function to generate the text to type
-    
-    #Function to get the typing text
+    # Function to get the typing text
     def getTypingText(self):
         return self.typingText
-    
-    #Function to get the duration of the tts
+
+    # Function to get the duration of the tts
     def getTTSDuration(self):
         return self.TTSDuration
 
-    #function to delete tts file
+    # Function to delete tts file
     def deleteTTSFile(self):
         os.remove(self.filename)
 
-    #make tts file from input text, and update tts duration
-    def TTSGenerate(self,input_text):
+    # Make tts file from input text, and update tts duration
+    def TTSGenerate(self, input_text):
         tts_file = gTTS(input_text, lang='en')
         tts_file.save(self.filename)
         file_generated = MP3(self.filename)
         self.TTSDuration = file_generated.info.length
-        
+
+    # Play TTS using threading to avoid blocking
     def playTTS(self):
-        playsound(self.filename)
-        
-
-
-
+        threading.Thread(target=playsound, args=(self.filename,), daemon=True).start()
 
 
 class ProgressBarManager:
-    def __init__(self, root, audio_duration):
+    def __init__(self, root, tts_manager):
         self.root = root
-        self.audio_duration = audio_duration
+        self.tts_manager = tts_manager
         self.update_interval = 100  # Update every 100 milliseconds
-        self.increment = 100 / (self.audio_duration * 1000 / self.update_interval)  # Calculate increment per update
         self.progress_value = 0  # Track the progress bar value
         self.timer_id = None  # Track the timer ID
         self.is_paused = True
@@ -58,6 +52,15 @@ class ProgressBarManager:
         self.progress_bar.grid(row=0, column=1, pady=10, sticky="s")
         self.progress_bar["maximum"] = 100  # Set a maximum value for the progress bar
 
+        # Update audio duration using getTTSDuration()
+        self.update_audio_duration()
+
+    def update_audio_duration(self):
+        self.audio_duration = self.tts_manager.getTTSDuration()
+        if self.audio_duration > 0:
+            self.increment = 100 / (self.audio_duration * 1000 / self.update_interval)  # Calculate increment per update
+        else:
+            self.increment = 0
 
     def update_progress_bar(self):
         if not self.is_paused and self.progress_value < 100:  # so the progress bar doesn't exceed 100%, also check if paused
@@ -70,7 +73,8 @@ class ProgressBarManager:
             self.root.after_cancel(self.timer_id)
         self.progress_value = 0  # Reset progress value
         self.progress_bar["value"] = 0  # Reset progress bar
-        self.is_paused = True  #Default this to true
+        self.is_paused = False  # Set to False to start updating
+        self.update_audio_duration()  # Update audio duration before starting
         self.update_progress_bar()  # Start updating the progress bar
 
     def reset_progress_bar(self):
@@ -82,10 +86,10 @@ class ProgressBarManager:
 
     def pause_progress_bar(self):
         self.is_paused = True  # Pause progress bar
-    
+
     def resume_progress_bar(self):
         self.is_paused = False  # Resume progress bar
-        self.update_progress_bar() # and continue updating
+        self.update_progress_bar()  # and continue updating
 
 
 class TextManager:
@@ -130,14 +134,15 @@ class AudioTypingTest:
 
         # Initialize managers
         self.tts_manager = ttsManager(self.root)
-        self.progress_bar_manager = ProgressBarManager(self.root, self.get_audio_duration())
+
+        # Generate TTS to get the duration initially
+        self.tts_manager.TTSGenerate(self.tts_manager.getTypingText())
+
+        self.progress_bar_manager = ProgressBarManager(self.root, self.tts_manager)
         self.text_manager = TextManager(self.root)
 
-        # Start the progress bar
-        self.progress_bar_manager.start_progress_bar()
-
     def setup_ui(self):
-        #grid layout
+        # grid layout
         self.root.columnconfigure(0, weight=1)  # Sidebar
         self.root.columnconfigure(1, weight=3)  # Main Typing Box
         self.root.columnconfigure(2, weight=1)  # Buttons
@@ -152,87 +157,78 @@ class AudioTypingTest:
         self.sidebar = tk.Frame(self.root, bg="#ddd", width=500)
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsw")
 
-        #Sidebar contents
-        #Settings label
+        # Sidebar contents
+        # Settings label
         self.settings_label = tk.Label(self.sidebar, text='Settings', font=("Times New Roman", 14))
-        self.settings_label.grid(row=0,column=0,padx=10,pady=10,sticky="new")
+        self.settings_label.grid(row=0, column=0, padx=10, pady=10, sticky="new")
 
-        #Distortion
-        #Label
+        # Distortion
+        # Label
         self.distortion_label = tk.Label(self.sidebar, text='Distortion:', font=("Times New Roman", 12))
-        self.distortion_label.grid(row=1,column=0,padx=10,pady=10,sticky="w")
+        self.distortion_label.grid(row=1, column=0, padx=10, pady=10, sticky="w")
         
-        #Variable
+        # Variable
         self.distortion_status = StringVar()
         
-        #On
+        # On
         self.distortion_on = tk.Radiobutton(self.sidebar, text="On", variable=self.distortion_status, value="on_distortion")
-        self.distortion_on.grid(row=2,column=0,padx=10,pady=0,sticky="ew")
+        self.distortion_on.grid(row=2, column=0, padx=10, pady=0, sticky="ew")
         
-
-        #Off
+        # Off
         self.distortion_off = tk.Radiobutton(self.sidebar, text="Off", variable=self.distortion_status, value="off_distortion")
-        self.distortion_off.grid(row=3,column=0,padx=10,pady=0,sticky="ew")
+        self.distortion_off.grid(row=3, column=0, padx=10, pady=0, sticky="ew")
 
-        #Set Default State
+        # Set Default State
         self.distortion_status.set("off_distortion")
 
-        #Show Text Box
-        #Label
+        # Show Text Box
+        # Label
         self.show_text_box_label = tk.Label(self.sidebar, text="Show Text Box:", font=("Times New Roman", 12))
-        self.show_text_box_label.grid(row=4,column=0,padx=10,pady=10,sticky="ew")
+        self.show_text_box_label.grid(row=4, column=0, padx=10, pady=10, sticky="ew")
         
-
-        #Variable
+        # Variable
         self.text_box_status = StringVar()
         
-        #On
+        # On
         self.text_box_on = tk.Radiobutton(self.sidebar, text="Yes", variable=self.text_box_status, value="on_text_box")
-        self.text_box_on.grid(row=5,column=0,padx=10,pady=0,sticky="ew")
+        self.text_box_on.grid(row=5, column=0, padx=10, pady=0, sticky="ew")
         
-        #Off
+        # Off
         self.text_box_on = tk.Radiobutton(self.sidebar, text="No", variable=self.text_box_status, value="off_text_box")
-        self.text_box_on.grid(row=6,column=0,padx=10,pady=0,sticky="ew")
+        self.text_box_on.grid(row=6, column=0, padx=10, pady=0, sticky="ew")
 
-        #Set Default State
+        # Set Default State
         self.text_box_status.set("on_text_box")
         
-        #Additional Settings can go here if necisary
+        # Additional Settings can go here if necessary
         
 
-        #Sign in
-        #Username
-        #Label
+        # Sign in
+        # Username
+        # Label
         self.username_label = tk.Label(self.sidebar, text="Username:")
-        self.username_label.grid(row=7,column=0,padx=10,pady=10,sticky="esw")
+        self.username_label.grid(row=7, column=0, padx=10, pady=10, sticky="esw")
         
-        #Variable
+        # Variable
         self.username_value = StringVar()
-        #Entry Box
+        # Entry Box
         self.username_entry = ttk.Entry(self.sidebar, textvariable=self.username_value)
-        self.username_entry.grid(row=8,column=0,padx=10,pady=0,sticky="esw")
+        self.username_entry.grid(row=8, column=0, padx=10, pady=0, sticky="esw")
 
-        #Password
-        #Label
+        # Password
+        # Label
         self.password_label = tk.Label(self.sidebar, text="Password:")
-        self.password_label.grid(row=9,column=0,padx=10,pady=10,sticky="esw")
+        self.password_label.grid(row=9, column=0, padx=10, pady=10, sticky="esw")
         
-        #Variable
+        # Variable
         self.password_value = StringVar()
-        #Entry Box
+        # Entry Box
         self.password_entry = ttk.Entry(self.sidebar, textvariable=self.password_value, show="*")
-        self.password_entry.grid(row=10,column=0,padx=10,pady=0,sticky="esw")
+        self.password_entry.grid(row=10, column=0, padx=10, pady=0, sticky="esw")
 
-        #Sign In Button
+        # Sign In Button
         self.sign_in_button = tk.Button(self.sidebar, text="Sign In", command=self.sign_in)
-        self.sign_in_button.grid(row=11,column=0,padx=10,pady=0,sticky="esw")
-
-        
-
-
-
-
-
+        self.sign_in_button.grid(row=11, column=0, padx=10, pady=0, sticky="esw")
 
         # Submit Button
         self.submit_button = tk.Button(self.root, text="Submit", command=self.submit_text)
@@ -249,23 +245,10 @@ class AudioTypingTest:
         # Play Button
         self.play_button = tk.Button(self.root, text="\u25B6", font=("Arial", 14), command=self.resume_progress_bar)
         self.play_button.grid(row=0, column=2, padx=10, pady=10, sticky="w")
-        
 
-    #placeholder function for sign in
+    # Placeholder function for sign in
     def sign_in(self):
         return "0"
-
-
-
-
-
-
-    def get_audio_duration(self):
-        """
-        This function will return the duration of the audio file.
-        For now, it returns a default value of 60 seconds.
-        """
-        return 20  # Default duration in seconds
 
     def submit_text(self):
         user_text = self.text_manager.get_text()  # Get text from the typing box
@@ -273,17 +256,17 @@ class AudioTypingTest:
         # Calculate word count
         word_count = len(user_text.split())
 
-        #Calculate words per minute
-        minutes = self.get_audio_duration() / 60
-        wpm = word_count / minutes if minutes > 0 else 0   #Pepare WPM to display
+        # Calculate words per minute
+        minutes = self.tts_manager.getTTSDuration() / 60
+        wpm = word_count / minutes if minutes > 0 else 0  # Prepare WPM to display
 
         # Calculate Accuracy
         reference_text = self.tts_manager.getTypingText()
         user_words = user_text.split()
-        reference_words = reference_text.split() #Audio Transcript
+        reference_words = reference_text.split()  # Audio Transcript
         correct_words = sum(1 for u, r in zip(user_words, reference_words) if u == r)
         accuracy = (correct_words / word_count) * 100
-        results = f"You typed {word_count} words.\nWords per Minute: {wpm:.2f}\nAccuracy: {accuracy: .2f}" #Accuracy will be added later
+        results = f"You typed {word_count} words.\nWords per Minute: {wpm:.2f}\nAccuracy: {accuracy:.2f}"  # Accuracy will be added later
 
         # Hide the progress bar and show the results label
         self.progress_bar_manager.hide_progress_bar()
@@ -307,13 +290,9 @@ class AudioTypingTest:
         self.tts_manager.deleteTTSFile()
 
     def resume_progress_bar(self):
-        self.progress_bar_manager.resume_progress_bar()  # Resume the progress bar
         self.tts_manager.TTSGenerate(self.tts_manager.getTypingText())
         self.tts_manager.playTTS()
-        
-
-
-
+        self.progress_bar_manager.reset_progress_bar()  # Restart the progress bar
 
 
 # Create the main window
