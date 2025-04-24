@@ -6,6 +6,7 @@ from gtts import gTTS
 from mutagen.mp3 import MP3
 from playsound3 import playsound
 import os
+import time
 
 class ttsManager:
     def __init__(self, root):
@@ -257,14 +258,18 @@ class AudioTypingTest:
         word_count = len(user_text.split())
 
         # Calculate words per minute
-        minutes = self.tts_manager.getTTSDuration() / 60
+        if self.start_time:
+            elapsed_time = time.time() - self.start_time
+        else:
+            elapsed_time = 1  # prevent divide by zero if somehow start_time isn't set
+        minutes = elapsed_time / 60
         wpm = word_count / minutes if minutes > 0 else 0  # Prepare WPM to display
 
         # Calculate Accuracy
         reference_text = self.tts_manager.getTypingText()
-        user_words = user_text.split()
-        reference_words = reference_text.split()  # Audio Transcript
-        correct_words = sum(1 for u, r in zip(user_words, reference_words) if u == r)
+        user_words = user_text.lower().split()
+        reference_words = reference_text.lower().split()  # Audio Transcript
+        correct_words = sum(1 for word in reference_words if word in user_words)
         accuracy = (correct_words / word_count) * 100
         results = f"You typed {word_count} words.\nWords per Minute: {wpm:.2f}\nAccuracy: {accuracy:.2f}"  # Accuracy will be added later
 
@@ -293,7 +298,7 @@ class AudioTypingTest:
         self.tts_manager.TTSGenerate(self.tts_manager.getTypingText())
         self.tts_manager.playTTS()
         self.progress_bar_manager.reset_progress_bar()  # Restart the progress bar
-
+        self.start_time = time.time()
 
 # Create the main window
 root = tk.Tk()
