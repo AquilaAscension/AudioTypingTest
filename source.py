@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 from gtts import gTTS
 from mutagen.mp3 import MP3
-from playsound3 import playsound
+import pygame
 import os
 import time
 
@@ -14,6 +14,9 @@ class ttsManager:
         self.TTSDuration = 0
         self.filename = 'TypingTTS.mp3'
         self.typingText = "This is example text."
+        pygame.mixer.init()  # Initialize the mixer
+        self.audio_thread = None  # Thread for playing audio
+        self.is_paused = False  # Track if audio is paused
 
     # Function to get the typing text
     def getTypingText(self):
@@ -25,7 +28,10 @@ class ttsManager:
 
     # Function to delete tts file
     def deleteTTSFile(self):
-        os.remove(self.filename)
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.stop()
+        if os.path.exists(self.filename):
+            os.remove(self.filename)
 
     # Make tts file from input text, and update tts duration
     def TTSGenerate(self, input_text):
@@ -36,7 +42,24 @@ class ttsManager:
 
     # Play TTS using threading to avoid blocking
     def playTTS(self):
-        threading.Thread(target=playsound, args=(self.filename,), daemon=True).start()
+        def play_audio():
+            pygame.mixer.music.load(self.filename)
+            pygame.mixer.music.play()
+            self.is_paused = False
+
+        self.audio_thread = threading.Thread(target=play_audio, daemon=True)
+        self.audio_thread.start()
+
+    # Pause TTS playback
+    def pauseTTS(self):
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.pause()
+            self.is_paused = True
+
+    def resumeTTS(self):
+        if self.is_paused:
+            pygame.mixer.music.unpause()
+            self.is_paused = False
 
 
 class ProgressBarManager:
@@ -292,13 +315,16 @@ class AudioTypingTest:
 
     def pause_progress_bar(self):
         self.progress_bar_manager.pause_progress_bar()  # Pause the progress bar
-        self.tts_manager.deleteTTSFile()
+        self.tts_manager.pauseTTS()
 
     def resume_progress_bar(self):
-        self.tts_manager.TTSGenerate(self.tts_manager.getTypingText())
-        self.tts_manager.playTTS()
-        self.progress_bar_manager.reset_progress_bar()  # Restart the progress bar
-        self.start_time = time.time()
+        if self.tts_manager.is_paused:  # If audio is paused, resume playback
+            self.tts_manager.resumeTTS()
+            self.progress_bar_manager.resume_progress_bar()  # Resume the progress bar
+        elif not pygame.mixer.music.get_busy():  # If audio is not playing, start from the beginning
+            self.tts_manager.playTTS()
+            self.progress_bar_manager.start_progress_bar()  # Restart the progress bar
+            self.start_time = time.time()  # Reset the start time
 
 # Create the main window
 root = tk.Tk()
