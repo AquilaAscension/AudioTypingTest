@@ -7,6 +7,7 @@ import PyPDF2
 import time
 import os
 import threading
+import re
 
 from tts_manager import TTSManager
 from text_manager import TextManager
@@ -27,7 +28,10 @@ class AudioTypingTest:
         self.generate_tts_in_background(self.tts_manager.getTypingText())
         self.progress_bar_manager = ProgressBarManager(self.root, self.tts_manager)
         self.text_manager = TextManager(self.root)
+        self.text_manager.typing_box.bind("<KeyRelease>", self.on_typing)
+        self.text_manager.typing_box.bind("<KeyPress>", self.start_timer_if_needed)
         self.start_time = None
+        self.timer_id = None  # For scheduling timer updates
 
     def setup_ui(self):
         self.root.columnconfigure(0, weight=1)
@@ -150,15 +154,14 @@ class AudioTypingTest:
             messagebox.showerror("Error", f"Could not load file:\n{str(e)}")
 
     def submit_text(self):
+        self.stop_timer_display()
         user_text = self.text_manager.get_text()
+        reference = self.tts_manager.getTypingText()
         word_count = len(user_text.split())
         elapsed_time = time.time() - self.start_time if self.start_time else 1
         wpm = word_count / (elapsed_time / 60) if elapsed_time > 0 else 0
 
-        reference_words = self.tts_manager.getTypingText().lower().split()
-        user_words = user_text.lower().split()
-        correct = sum(1 for i, w in enumerate(reference_words) if i < len(user_words) and user_words[i] == w)
-        accuracy = (correct / len(reference_words)) * 100 if reference_words else 0
+        accuracy = self.calculate_word_accuracy(user_text, reference)
 
         results = f"You typed {word_count} words.\nWords per Minute: {wpm:.2f}\nAccuracy: {accuracy:.2f}"
         self.progress_bar_manager.hide_progress_bar()
@@ -169,9 +172,12 @@ class AudioTypingTest:
     def reset_ui(self):
         self.text_manager.hide_results()
         self.progress_bar_manager.reset_progress_bar()
+        self.start_time = None
 
     def discard_text(self):
+        self.stop_timer_display()
         self.text_manager.clear_text()
+        self.start_time = None
 
     def pause_progress_bar(self):
         self.tts_manager.pauseTTS()
@@ -189,7 +195,6 @@ class AudioTypingTest:
 
             self.tts_manager.playTTS(speed=speed)
             self.progress_bar_manager.start_progress_bar(speed=speed)
-            self.start_time = time.time()
 
     def show_loading_window(self, message="Generating TTS..."):
         self.loading_window = tk.Toplevel(self.root)
@@ -227,3 +232,44 @@ class AudioTypingTest:
 
         self.show_loading_window("Generating TTS...")
         threading.Thread(target=task, daemon=True).start()
+
+    def on_typing(self, event):
+        user_input = self.text_manager.get_text()
+        reference = self.tts_manager.getTypingText()
+        self.text_manager.highlight_typing_progress(user_input, reference)
+
+    def calculate_word_accuracy(self, user_text, reference_text):
+        def normalize(text):
+            return re.sub(r'[^\w\s]', '', text).lower().split()
+
+        user_words = normalize(user_text)
+        reference_words = normalize(reference_text)
+
+        correct = sum(1 for i in range(min(len(user_words), len(reference_words)))
+                    if user_words[i] == reference_words[i])
+
+        total = max(len(reference_words), 1)
+        return (correct / total) * 100
+    
+    def start_timer_display(self):
+        if self.timer_id is None:
+            self.text_manager.timer_label.grid()
+            self.update_timer_display()
+
+    def update_timer_display(self):
+        if self.start_time:
+            elapsed = time.time() - self.start_time
+            self.text_manager.timer_label.config(text=f"Time: {elapsed:.1f}s")
+            self.timer_id = self.root.after(500, self.update_timer_display)
+
+    def stop_timer_display(self):
+        if self.timer_id:
+            self.root.after_cancel(self.timer_id)
+            self.timer_id = None
+        self.text_manager.timer_label.grid_remove()
+
+
+    def start_timer_if_needed(self, event=None):
+        if self.start_time is None:
+            self.start_time = time.time()
+            self.start_timer_display()

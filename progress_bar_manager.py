@@ -40,8 +40,13 @@ class ProgressBarManager:
         self.update_progress_bar()
 
     def reset_progress_bar(self):
+        if self.timer_id:
+            self.root.after_cancel(self.timer_id)
+            self.timer_id = None
+        self.progress_value = 0
+        self.progress_bar["value"] = 0
+        self.is_paused = True
         self.progress_bar.grid()
-        self.start_progress_bar()
 
     def hide_progress_bar(self):
         self.progress_bar.grid_remove()
@@ -52,3 +57,4 @@ class ProgressBarManager:
     def resume_progress_bar(self):
         self.is_paused = False
         self.update_progress_bar()
+
