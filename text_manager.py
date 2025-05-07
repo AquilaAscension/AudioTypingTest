@@ -32,7 +32,10 @@ class TextManager:
     def hide_results(self):
         self.results_label.grid_remove()
 
-    def highlight_typing_progress(self, user_text, reference_text):
+    def highlight_typing_progress(self, user_text, reference_text, highlight_enabled=True):
+        if not highlight_enabled:
+            return
+        
         def normalize(text):
             return re.sub(r'\s+', '', re.sub(r'[^\w\s]', '', text)).lower()
 
@@ -62,4 +65,24 @@ class TextManager:
 
             cursor += 1
             i += 1
+
+    def highlight_submission_errors(self, reference_text):
+        self.typing_box.tag_remove("error", "1.0", "end")
+
+        user_words = self.get_text().split()
+        reference_words = reference_text.split()
+
+        # Apply error highlighting word by word
+        index = 0  # character index from start of text
+
+        for i, user_word in enumerate(user_words):
+            start_idx = f"1.0+{index}c"
+            end_idx = f"1.0+{index + len(user_word)}c"
+
+            if i >= len(reference_words) or user_word.lower().strip(".,!?") != reference_words[i].lower().strip(".,!?"):
+                self.typing_box.tag_add("error", start_idx, end_idx)
+
+            index += len(user_word) + 1  # move to next word (includes the space)
+
+        self.typing_box.tag_config("error", background="#ffcccc")  # light red
 

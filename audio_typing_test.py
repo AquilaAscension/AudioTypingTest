@@ -108,6 +108,17 @@ class AudioTypingTest:
                                     length=200)
         self.speed_slider.grid(row=14, column=0, padx=10, pady=5, sticky="ew")
 
+        self.highlight_label = tk.Label(self.sidebar, text="Show Spelling Errors:", font=("Times New Roman", 12))
+        self.highlight_label.grid(row=15, column=0, padx=10, pady=(20, 0), sticky="w")
+
+        self.highlight_var = tk.StringVar(value="off_highlight")  # Default = OFF
+
+        self.highlight_on = tk.Radiobutton(self.sidebar, text="Yes", variable=self.highlight_var, value="on_highlight")
+        self.highlight_on.grid(row=16, column=0, padx=10, sticky="w")
+
+        self.highlight_off = tk.Radiobutton(self.sidebar, text="No", variable=self.highlight_var, value="off_highlight")
+        self.highlight_off.grid(row=17, column=0, padx=10, sticky="w")
+
 
     def sign_in(self):
         return "0"
@@ -166,11 +177,13 @@ class AudioTypingTest:
         results = f"You typed {word_count} words.\nWords per Minute: {wpm:.2f}\nAccuracy: {accuracy:.2f}"
         self.progress_bar_manager.hide_progress_bar()
         self.text_manager.show_results(results)
-        self.text_manager.clear_text()
+        self.text_manager.highlight_submission_errors(self.tts_manager.getTypingText())
         self.root.after(5000, self.reset_ui)
 
     def reset_ui(self):
+        self.text_manager.typing_box.tag_remove("error", "1.0", "end")
         self.text_manager.hide_results()
+        self.text_manager.clear_text()
         self.progress_bar_manager.reset_progress_bar()
         self.start_time = None
 
@@ -236,7 +249,8 @@ class AudioTypingTest:
     def on_typing(self, event):
         user_input = self.text_manager.get_text()
         reference = self.tts_manager.getTypingText()
-        self.text_manager.highlight_typing_progress(user_input, reference)
+        highlight_enabled = self.highlight_var.get() == "on_highlight"
+        self.text_manager.highlight_typing_progress(user_input, reference, highlight_enabled)
 
     def calculate_word_accuracy(self, user_text, reference_text):
         def normalize(text):
