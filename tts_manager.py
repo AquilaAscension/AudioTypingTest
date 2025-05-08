@@ -39,8 +39,10 @@ class TTSManager:
         tts_file = gTTS(input_text, lang='en')
         tts_file.save(self.filename)
         file_generated = MP3(self.filename)
-        self.TTSDuration = file_generated.info.length
-        subprocess.run(["ffmpeg", "-y", "-i", self.filename, self.wav_file],
+        self.TTSDuration = file_generated.info.length 
+        base_dir = os.path.dirname(os.path.abspath(__file__)) #Get the current directory of the file we are running
+        ffmpeg_path = os.path.join(base_dir, "ffmpeg", "ffmpeg.exe") #from our current directory go into the folder ffmpeg and find ffmpeg.exe
+        subprocess.run([ffmpeg_path, "-y", "-i", self.filename, self.wav_file],
                        check=True)
 
     def load_and_stretch_audio(self, speed=1.0):
