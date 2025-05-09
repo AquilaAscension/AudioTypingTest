@@ -18,6 +18,9 @@ class AudioTypingTest:
         self.root = root
         self.root.title("Audio Typing Test")
 
+        root.tk.call("source", "azure.tcl")
+        root.tk.call("set_theme", "dark")
+
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         self.root.geometry(f"{screen_width}x{screen_height}")
@@ -43,7 +46,7 @@ class AudioTypingTest:
 
         tk.Label(self.root, text="Audio Typing Test", font=("Times New Roman", 16, "bold")).grid(row=0, column=1, pady=10, sticky="n")
 
-        self.sidebar = tk.Frame(self.root, bg="#ddd", width=500)
+        self.sidebar = tk.Frame(self.root, width=500, bd=1 , relief="raised")
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsw")
 
         self.settings_label = tk.Label(self.sidebar, text='Settings', font=("Times New Roman", 14))
