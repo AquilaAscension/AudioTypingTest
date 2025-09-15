@@ -262,11 +262,31 @@ class AudioTypingTest:
         user_words = normalize(user_text)
         reference_words = normalize(reference_text)
 
-        correct = sum(1 for i in range(min(len(user_words), len(reference_words)))
-                    if user_words[i] == reference_words[i])
+        # Word-level Levenshtein distance
+        def levenshtein(seq1, seq2):
+            m, n = len(seq1), len(seq2)
+            dp = [[0] * (n+1) for _ in range(m+1)]
 
-        total = max(len(reference_words), 1)
-        return (correct / total) * 100
+            for i in range(m+1):
+                dp[i][0] = i
+            for j in range(n+1):
+                dp[0][j] = j
+
+            for i in range(1, m+1):
+                for j in range(1, n+1):
+                    cost = 0 if seq1[i-1] == seq2[j-1] else 1
+                    dp[i][j] = min(
+                        dp[i-1][j] + 1,     # deletion
+                        dp[i][j-1] + 1,     # insertion
+                        dp[i-1][j-1] + cost # substitution
+                    )
+            return dp[m][n]
+
+        distance = levenshtein(user_words, reference_words)
+        total = max(len(reference_words), len(user_words), 1)  # avoid div by zero
+        accuracy = (1 - distance / total) * 100
+        return accuracy
+
     
     def start_timer_display(self):
         if self.timer_id is None:
