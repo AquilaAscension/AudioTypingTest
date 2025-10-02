@@ -6,11 +6,12 @@ import soundfile as sf
 import librosa
 import subprocess
 import time
-from gtts import gTTS
-from mutagen.mp3 import MP3
+from tts_kokoro import kTTS
+#from gtts import gTTS
+#from mutagen.mp3 import MP3
 
 class TTSManager:
-    def __init__(self, filename='TypingTTS.mp3'):
+    def __init__(self, filename='TypingTTS.wav'):
         self.filename = filename
         self.wav_file = 'TypingTTS.wav'
         self.typingText = "This is example text."
@@ -36,6 +37,10 @@ class TTSManager:
                 os.remove(f)
 
     def TTSGenerate(self, input_text):
+        kTTS(input_text, lang = 'en').save(self.wav_file)
+        info = sf.info(self.wav_file)
+        self.TTSDuration = info.frames / info.samplerate
+        """
         tts_file = gTTS(input_text, lang='en')
         tts_file.save(self.filename)
         file_generated = MP3(self.filename)
@@ -44,19 +49,21 @@ class TTSManager:
         ffmpeg_path = os.path.join(base_dir, "ffmpeg", "ffmpeg.exe") #from our current directory go into the folder ffmpeg and find ffmpeg.exe
         subprocess.run([ffmpeg_path, "-y", "-i", self.filename, self.wav_file],
                        check=True)
+        """
 
     def load_and_stretch_audio(self, speed=1.0):
-        data, sr = sf.read(self.wav_file)
+        data, sr = sf.read(self.wav_file, dtype='float32')
         if data.ndim > 1:
             data = np.mean(data, axis=1)  # convert to mono if stereo
-        stretched = librosa.effects.time_stretch(data, rate=speed)
-        self.audio_data = stretched.astype(np.float32)
+        if speed != 1.0:
+            data = librosa.effects.time_stretch(data, rate=speed)
+        self.audio_data = data
         self.sample_rate = sr
         self.position = 0
 
     def play_callback(self, outdata, frames, time_info, status):
         if self.is_paused or self.audio_data is None:
-            outdata[:] = np.zeros((frames, 1), dtype=np.float32)
+            outdata[:] = 0.0
             return
         end = min(self.position + frames, len(self.audio_data))
         chunk = self.audio_data[self.position:end]

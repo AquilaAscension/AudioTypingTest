@@ -2,11 +2,18 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug main.py",
+      "name": "Run main.py (auto-venv)",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/main.py",
-      "console": "integratedTerminal"
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "preLaunchTask": "create-venv-if-missing",
+      "justMyCode": true,
+      "env": {
+        // pass constraints to pip for transitive installs (spacy<4)
+        "PIP_CONSTRAINT": "${workspaceFolder}/pip-constraints.txt"
+      }
     }
   ]
 }

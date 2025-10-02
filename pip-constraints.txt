@@ -1,0 +1,2 @@
+spacy<3.9 ; python_version < "3.13"
+spacy-curated-transformers<0.3 ; python_version < "3.13"

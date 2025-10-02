@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "create-venv-if-missing",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "if (!(Test-Path .venv\\Scripts\\python.exe)) { py -3.11 -m venv .venv }"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

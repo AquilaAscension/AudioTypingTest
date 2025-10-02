@@ -1,0 +1,5 @@
+{
+  // Always debug with the venv interpreter (once created by the task)
+  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+  "python.terminal.activateEnvironment": false
+}
