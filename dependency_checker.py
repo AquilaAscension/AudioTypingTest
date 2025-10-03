@@ -7,11 +7,9 @@ import urllib.request
 from tkinter import messagebox, Tk
 
 REQUIRED_LIBRARIES = {
-    "gtts": "gTTS",
-    "mutagen": "mutagen",
+    "piper": "piper-tts",
     "docx": "python-docx",
     "PyPDF2": "PyPDF2",
-    "librosa": "librosa",
     "sounddevice": "sounddevice",
     "soundfile": "soundfile",
     "numpy": "numpy"

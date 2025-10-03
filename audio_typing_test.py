@@ -35,6 +35,7 @@ class AudioTypingTest:
         self.text_manager.typing_box.bind("<KeyPress>", self.start_timer_if_needed)
         self.start_time = None
         self.timer_id = None  # For scheduling timer updates
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def setup_ui(self):
         self.root.columnconfigure(0, weight=1)
@@ -122,6 +123,34 @@ class AudioTypingTest:
         self.highlight_off = tk.Radiobutton(self.sidebar, text="No", variable=self.highlight_var, value="off_highlight")
         self.highlight_off.grid(row=17, column=0, padx=10, sticky="w")
 
+    def on_close(self):
+        # Stop timers/UI loops
+        self.stop_timer_display()
+        self.progress_bar_manager.reset_progress_bar()
+
+        # Stop audio stream cleanly
+        try:
+            self.tts_manager.pauseTTS()
+            if self.tts_manager.stream:
+                try:
+                    self.tts_manager.stream.stop()
+                except Exception:
+                    pass
+                try:
+                    self.tts_manager.stream.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Delete synthesized files
+        try:
+            self.tts_manager.deleteTTSFile()
+        except Exception:
+            pass
+
+        # Close the window
+        self.root.destroy()
 
     def sign_in(self):
         return "0"

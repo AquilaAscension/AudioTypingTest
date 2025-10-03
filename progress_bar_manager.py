@@ -1,11 +1,13 @@
 from tkinter import ttk
 
 class ProgressBarManager:
-    def __init__(self, root, tts_manager):
+    def __init__(self, root, tts_manager, update_interval_ms: int = 100, use_stream_progress: bool = True):
         self.root = root
         self.tts_manager = tts_manager
-        self.update_interval = 100
-        self.progress_value = 0
+        self.update_interval = int(update_interval_ms)
+        self.use_stream_progress = bool(use_stream_progress)
+
+        self.progress_value = 0.0
         self.timer_id = None
         self.is_paused = True
 
@@ -13,38 +15,61 @@ class ProgressBarManager:
         self.progress_bar.grid(row=0, column=1, pady=10, sticky="s")
         self.progress_bar["maximum"] = 100
 
+        self.audio_duration = 0.0   # seconds
+        self.increment = 0.0        # % per tick (fallback)
         self.update_audio_duration()
 
     def update_audio_duration(self, speed=1.0):
-        base_duration = self.tts_manager.getTTSDuration()
-        self.audio_duration = base_duration / speed if speed > 0 else base_duration
-        if self.audio_duration > 0:
-            self.increment = 100 / (self.audio_duration * 1000 / self.update_interval)
+        base_duration = float(self.tts_manager.getTTSDuration() or 0.0)
+
+        # If the TTS pipeline uses synth-time speed, the WAV on disk already encodes the final duration; do not divide by speed again.
+        if getattr(self.tts_manager, "use_synth_speed", False):
+            self.audio_duration = base_duration
         else:
-            self.increment = 0
+            self.audio_duration = base_duration / speed if speed > 0 else base_duration
 
+        # Increment is only used when not using stream driven progress
+        ticks = (self.audio_duration * 1000.0) / max(self.update_interval, 1)
+        self.increment = 100.0 / ticks if ticks > 0 else 0.0
 
-    def update_progress_bar(self):
-        if not self.is_paused and self.progress_value < 100:
+    def _tick_stream_driven(self):
+        if not self.is_paused:
+            self.progress_value = float(self.tts_manager.get_progress_percent())
+            self.progress_bar["value"] = self.progress_value
+
+            if self.progress_value < 100.0:
+                self.timer_id = self.root.after(self.update_interval, self._tick_stream_driven)
+
+    def _tick_time_driven(self):
+        if not self.is_paused and self.progress_value < 100.0:
             self.progress_value += self.increment
             self.progress_bar["value"] = self.progress_value
-            self.timer_id = self.root.after(self.update_interval, self.update_progress_bar)
+            self.timer_id = self.root.after(self.update_interval, self._tick_time_driven)
 
     def start_progress_bar(self, speed=1.0):
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
-        self.progress_value = 0
-        self.progress_bar["value"] = 0
+
+        # Reset visuals
+        self.progress_value = 0.0
+        self.progress_bar["value"] = 0.0
         self.is_paused = False
+
+        # Always refresh duration (used for display or fallback calc)
         self.update_audio_duration(speed)
-        self.update_progress_bar()
+
+        # Prefer stream-driven sync if available
+        if self.use_stream_progress and hasattr(self.tts_manager, "get_progress_percent"):
+            self.timer_id = self.root.after(self.update_interval, self._tick_stream_driven)
+        else:
+            self.timer_id = self.root.after(self.update_interval, self._tick_time_driven)
 
     def reset_progress_bar(self):
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
             self.timer_id = None
-        self.progress_value = 0
-        self.progress_bar["value"] = 0
+        self.progress_value = 0.0
+        self.progress_bar["value"] = 0.0
         self.is_paused = True
         self.progress_bar.grid()
 
@@ -55,6 +80,10 @@ class ProgressBarManager:
         self.is_paused = True
 
     def resume_progress_bar(self):
-        self.is_paused = False
-        self.update_progress_bar()
-
+        if self.is_paused:
+            self.is_paused = False
+            # resume appropriate ticking mode
+            if self.use_stream_progress and hasattr(self.tts_manager, "get_progress_percent"):
+                self._tick_stream_driven()
+            else:
+                self._tick_time_driven()
