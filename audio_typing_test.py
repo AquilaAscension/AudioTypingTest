@@ -8,6 +8,7 @@ import time
 import os
 import threading
 import re
+import csv
 
 from tts_manager import TTSManager
 from text_manager import TextManager
@@ -210,6 +211,9 @@ class AudioTypingTest:
         self.progress_bar_manager.hide_progress_bar()
         self.text_manager.show_results(results)
         self.text_manager.highlight_submission_errors(self.tts_manager.getTypingText())
+        username = self.username_value.get().strip() or "Guest"
+        self.save_score_to_csv(username, wpm, accuracy)
+        messagebox.showinfo("Score Saved", f"Results saved for {username}.")
         self.root.after(5000, self.reset_ui)
 
     def reset_ui(self):
@@ -315,6 +319,20 @@ class AudioTypingTest:
         total = max(len(reference_words), len(user_words), 1)  # avoid div by zero
         accuracy = (1 - distance / total) * 100
         return accuracy
+    
+    def save_score_to_csv(self, username, wpm, accuracy):
+        filename = "typing_test_scores.csv"
+        file_exists = os.path.isfile(filename)
+        with open(filename, mode="a", newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            # Write header if file is new
+            if not file_exists:
+                writer.writerow(["Username", "WPM", "Accuracy (%)", "Timestamp"])
+
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            writer.writerow([username, f"{wpm:.2f}", f"{accuracy:.2f}", timestamp])
+
 
     
     def start_timer_display(self):
