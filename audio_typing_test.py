@@ -388,6 +388,11 @@ class AudioTypingTest:
                 details.remove(detail)
                 listbox.delete(index)
 
+        def clear_all_details():
+            if details:
+                details.clear()
+                listbox.delete(0, "end")
+
         result = {"value": None}
 
         def confirm():
@@ -403,6 +408,9 @@ class AudioTypingTest:
 
         remove_button = tk.Button(button_frame, text="Remove Detail", command=remove_detail)
         remove_button.pack(side="left", padx=5)
+
+        clear_button = tk.Button(button_frame, text="Clear All", command=clear_all_details)
+        clear_button.pack(side="left", padx=5)
 
         spacer = tk.Frame(button_frame)
         spacer.pack(side="left", expand=True)
