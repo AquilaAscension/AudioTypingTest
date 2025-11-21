@@ -5,3 +5,5 @@
 /.vs/AudioTypingTest/FileContentIndex/b6d10c8a-1566-45c7-8240-03b75a9984ed.vsidx
 /.vs/AudioTypingTest/FileContentIndex
 voices/
+.venv/
+typing_test_scores.csv

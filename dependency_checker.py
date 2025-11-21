@@ -12,7 +12,8 @@ REQUIRED_LIBRARIES = {
     "PyPDF2": "PyPDF2",
     "sounddevice": "sounddevice",
     "soundfile": "soundfile",
-    "numpy": "numpy"
+    "numpy": "numpy",
+    "scipy": "scipy"
 }
 
 
