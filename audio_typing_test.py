@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+import ttkbootstrap as ttk
 from tkinter import filedialog
 from tkinter import messagebox
 import docx
@@ -97,7 +97,7 @@ class AudioTypingTest:
             value="on_distortion",
             command=self.update_distortion_setting
         )
-        self.distortion_on.grid(row=2, column=0, padx=10, pady=0, sticky="ew")
+        self.distortion_on.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
         self.distortion_off = ttk.Radiobutton(
             self.sidebar,
             text="Off",
@@ -105,7 +105,7 @@ class AudioTypingTest:
             value="off_distortion",
             command=self.update_distortion_setting
         )
-        self.distortion_off.grid(row=3, column=0, padx=10, pady=0, sticky="ew")
+        self.distortion_off.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
         self.distortion_status.set("off_distortion")
 
         self.show_text_box_label = tk.Label(self.sidebar, text="Show Text Box:", font=("Times New Roman", 12))
@@ -113,25 +113,25 @@ class AudioTypingTest:
 
         self.text_box_status = tk.StringVar()
         self.text_box_on = ttk.Radiobutton(self.sidebar, text="Yes", variable=self.text_box_status, value="on_text_box")
-        self.text_box_on.grid(row=5, column=0, padx=10, pady=0, sticky="ew")
+        self.text_box_on.grid(row=5, column=0, padx=10, pady=5, sticky="ew")
         self.text_box_off = ttk.Radiobutton(self.sidebar, text="No", variable=self.text_box_status, value="off_text_box")
-        self.text_box_off.grid(row=6, column=0, padx=10, pady=0, sticky="ew")
+        self.text_box_off.grid(row=6, column=0, padx=10, pady=5, sticky="ew")
         self.text_box_status.set("on_text_box")
 
         self.username_label = tk.Label(self.sidebar, text="Username:")
         self.username_label.grid(row=7, column=0, padx=10, pady=10, sticky="esw")
         self.username_value = tk.StringVar()
         self.username_entry = tk.Entry(self.sidebar, textvariable=self.username_value)
-        self.username_entry.grid(row=8, column=0, padx=10, pady=0, sticky="esw")
+        self.username_entry.grid(row=8, column=0, padx=10, pady=5, sticky="esw")
 
         self.password_label = tk.Label(self.sidebar, text="Password:")
         self.password_label.grid(row=9, column=0, padx=10, pady=10, sticky="esw")
         self.password_value = tk.StringVar()
         self.password_entry = tk.Entry(self.sidebar, textvariable=self.password_value, show="*")
-        self.password_entry.grid(row=10, column=0, padx=10, pady=0, sticky="esw")
+        self.password_entry.grid(row=10, column=0, padx=10, pady=5, sticky="esw")
 
         self.sign_in_button = tk.Button(self.sidebar, text="Sign In", command=self.sign_in)
-        self.sign_in_button.grid(row=11, column=0, padx=10, pady=0, sticky="esw")
+        self.sign_in_button.grid(row=11, column=0, padx=10, pady=5, sticky="esw")
 
         self.load_file_button = tk.Button(self.sidebar, text="Load File for TTS", command=self.load_file_for_tts)
         self.load_file_button.grid(row=12, column=0, padx=10, pady=10, sticky="ew")
@@ -156,6 +156,8 @@ class AudioTypingTest:
                                     orient="horizontal", variable=self.speed_var,
                                     length=200)
         self.speed_slider.grid(row=14, column=0, padx=10, pady=5, sticky="ew")
+
+
 
         self.highlight_label = tk.Label(self.sidebar, text="Show Spelling Errors:", font=("Times New Roman", 12))
         self.highlight_label.grid(row=15, column=0, padx=10, pady=(20, 0), sticky="w")
