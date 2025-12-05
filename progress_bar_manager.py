@@ -11,7 +11,7 @@ class ProgressBarManager:
         self.timer_id = None
         self.is_paused = True
 
-        self.progress_bar = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate")
+        self.progress_bar = ttk.Progressbar(root, orient="horizontal", length=800, mode="determinate")
         self.progress_bar.grid(row=0, column=1, pady=10, sticky="s")
         self.progress_bar["maximum"] = 100
 

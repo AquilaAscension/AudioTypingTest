@@ -111,12 +111,7 @@ class AudioTypingTest:
         self.show_text_box_label = tk.Label(self.sidebar, text="Show Text Box:", font=("Times New Roman", 12))
         self.show_text_box_label.grid(row=4, column=0, padx=10, pady=10, sticky="ew")
 
-        self.text_box_status = tk.StringVar()
-        self.text_box_on = ttk.Radiobutton(self.sidebar, text="Yes", variable=self.text_box_status, value="on_text_box")
-        self.text_box_on.grid(row=5, column=0, padx=10, pady=5, sticky="ew")
-        self.text_box_off = ttk.Radiobutton(self.sidebar, text="No", variable=self.text_box_status, value="off_text_box")
-        self.text_box_off.grid(row=6, column=0, padx=10, pady=5, sticky="ew")
-        self.text_box_status.set("on_text_box")
+        
 
         self.username_label = tk.Label(self.sidebar, text="Username:")
         self.username_label.grid(row=7, column=0, padx=10, pady=10, sticky="esw")
@@ -232,8 +227,7 @@ class AudioTypingTest:
 
             self.tts_manager.typingText = text_content
             self.tts_from_file = True
-            if self.text_box_status.get() == "on_text_box":
-                self.text_manager.clear_text()  # Do not insert the answer
+            
 
             self.start_time = None
 

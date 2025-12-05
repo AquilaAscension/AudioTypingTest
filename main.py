@@ -20,7 +20,8 @@ from audio_typing_test import AudioTypingTest
 if __name__ == "__main__":
     root = ttk.Tk()
     style = ttk.Style("darkly")
-    
+    root.state("zoomed")
+
     app = AudioTypingTest(root)
 
     # Delete audio file on normal interpreter shutdown
