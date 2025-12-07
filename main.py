@@ -20,7 +20,11 @@ from audio_typing_test import AudioTypingTest
 if __name__ == "__main__":
     root = ttk.Tk()
     style = ttk.Style("darkly")
-    root.state("zoomed")
+    try:
+        root.state("zoomed")
+    except tk.TclError:
+        # Some Tk builds don't support "zoomed"; fallback to platform attribute
+        root.attributes("-zoomed", True)
 
     app = AudioTypingTest(root)
 

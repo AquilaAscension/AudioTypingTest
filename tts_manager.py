@@ -51,12 +51,7 @@ class TTSManager:
                 f"Voices folder not found: {self.voices_dir}\n"
                 f"Create it and place <voice>.onnx + <voice>.onnx.json inside."
             )
-        self.model_path = os.path.join(self.voices_dir, model_basename)
-        self.config_path = self.model_path + ".json"
-        if not os.path.exists(self.model_path):
-            raise FileNotFoundError(f"Missing Piper model: {self.model_path}")
-        if not os.path.exists(self.config_path):
-            raise FileNotFoundError(f"Missing Piper config (.json): {self.config_path}")
+        self.model_path, self.config_path = self._resolve_voice_paths(model_basename)
 
         self._piper_cmd = self._find_piper_cmd()
         self._embedded_voice = None
@@ -73,6 +68,15 @@ class TTSManager:
             return [exe]
         # Fallback if not on PATH:
         return [sys.executable, "-m", "piper"]
+
+    def _resolve_voice_paths(self, model_basename):
+        model_path = os.path.join(self.voices_dir, model_basename)
+        config_path = model_path + ".json"
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Missing Piper model: {model_path}")
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Missing Piper config (.json): {config_path}")
+        return model_path, config_path
 
     def _init_embedded_voice(self):
         if PiperVoice is None:
@@ -144,6 +148,39 @@ class TTSManager:
         for f in [self.filename, self.wav_file]:
             if os.path.exists(f):
                 os.remove(f)
+
+    def set_voice_model(self, model_basename: str):
+        model_path, config_path = self._resolve_voice_paths(model_basename)
+        if model_path == self.model_path:
+            return
+
+        # Stop any active playback before swapping voices
+        self.pauseTTS()
+        if self.stream:
+            try:
+                self.stream.stop()
+            except Exception:
+                pass
+            try:
+                self.stream.close()
+            except Exception:
+                pass
+            self.stream = None
+
+        self.model_path = model_path
+        self.config_path = config_path
+        self._embedded_voice = None
+        self._use_embedded_voice = False
+        self._init_embedded_voice()
+
+        # Force re-synthesis on next play
+        self.audio_data = None
+        self.sample_rate = None
+        self.position = 0
+        self.is_armed = False
+        self._clean_audio = None
+        self._last_synth_scale = None
+        self.TTSDuration = 0.0
 
     def TTSGenerate(self, input_text: str, length_scale: float | None = None):
         self.typingText = input_text  # keep for later re-synthesis if speed changes

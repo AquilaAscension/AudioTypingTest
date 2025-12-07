@@ -57,6 +57,13 @@ class AudioTypingTest:
         screen_height = self.root.winfo_screenheight()
         self.root.geometry(f"{screen_width}x{screen_height}")
 
+        self.voice_options = {
+            "English": "en_US-libritts-high.onnx",
+            "Spanish": "es_MX-claude-high.onnx"
+        }
+        self.language_var = tk.StringVar(value="English")
+        self.current_language = "English"
+
         self.setup_ui()
         self.tts_manager = TTSManager()
         self.tts_from_file = False
@@ -110,6 +117,30 @@ class AudioTypingTest:
 
         self.show_text_box_label = tk.Label(self.sidebar, text="Show Text Box:", font=("Times New Roman", 12))
         self.show_text_box_label.grid(row=4, column=0, padx=10, pady=10, sticky="ew")
+
+        self.language_label = tk.Label(self.sidebar, text="Language:", font=("Times New Roman", 12))
+        self.language_label.grid(row=5, column=0, padx=10, pady=(10, 0), sticky="w")
+
+        self.language_frame = tk.Frame(self.sidebar)
+        self.language_frame.grid(row=6, column=0, padx=10, pady=5, sticky="w")
+
+        self.language_en = ttk.Radiobutton(
+            self.language_frame,
+            text="English",
+            variable=self.language_var,
+            value="English",
+            command=self.change_language
+        )
+        self.language_en.pack(side="left", padx=(0, 10))
+
+        self.language_es = ttk.Radiobutton(
+            self.language_frame,
+            text="Spanish",
+            variable=self.language_var,
+            value="Spanish",
+            command=self.change_language
+        )
+        self.language_es.pack(side="left")
 
         
 
@@ -238,14 +269,14 @@ class AudioTypingTest:
             if os.path.isfile(generation_path):
                 reuse_audio = messagebox.askyesno(
                     "Existing Audio Found",
-                    "Audio for this document already exists.\n"
+                    f"Audio for this document already exists in {self.current_language}.\n"
                     "Select Yes to reuse it or No to regenerate."
                 )
                 if reuse_audio and self.load_existing_generation(generation_path, text_content):
                     self.handle_details_for_file(file_key, text_content)
                     return
 
-            self.generate_tts_in_background(text_content, save_key=file_key)
+            self.generate_tts_in_background(text_content, save_key=file_key, language=self.current_language)
             self.handle_details_for_file(file_key, text_content)
 
         except Exception as e:
@@ -255,10 +286,27 @@ class AudioTypingTest:
         abs_path = os.path.abspath(file_path)
         return hashlib.sha256(abs_path.encode("utf-8")).hexdigest()
 
-    def get_generation_path(self, file_key):
-        return os.path.join(self.generations_dir, f"{file_key}.wav")
+    def get_language_slug(self, language=None):
+        language = language or self.current_language
+        return "es" if language == "Spanish" else "en"
 
-    def load_existing_generation(self, generation_path, text_content):
+    def get_generation_path(self, file_key, language=None):
+        slug = self.get_language_slug(language)
+        slugged = os.path.join(self.generations_dir, f"{file_key}_{slug}.wav")
+        legacy = os.path.join(self.generations_dir, f"{file_key}.wav")
+        if language is not None:
+            if os.path.exists(slugged):
+                return slugged
+            if os.path.exists(legacy) and (language == "English" or language is None):
+                return legacy
+            return slugged
+        if os.path.exists(slugged):
+            return slugged
+        if os.path.exists(legacy):
+            return legacy
+        return slugged
+
+    def load_existing_generation(self, generation_path, text_content, show_message=True):
         try:
             shutil.copy2(generation_path, self.tts_manager.wav_file)
             self.tts_manager.typingText = text_content
@@ -269,7 +317,8 @@ class AudioTypingTest:
             self.tts_manager.is_armed = True
             self.tts_manager.is_paused = False
             self.progress_bar_manager.update_audio_duration(speed=self.speed_var.get())
-            messagebox.showinfo("Audio Loaded", "Existing audio has been loaded for this document.")
+            if show_message:
+                messagebox.showinfo("Audio Loaded", "Existing audio has been loaded for this document.")
             return True
         except Exception as exc:
             messagebox.showerror("Audio Error", f"Failed to load saved audio:\n{exc}\nA new version will be generated.")
@@ -302,6 +351,87 @@ class AudioTypingTest:
         enabled = self.distortion_status.get() == "on_distortion"
         if hasattr(self, "tts_manager"):
             self.tts_manager.set_distortion_enabled(enabled)
+
+    def change_language(self):
+        selection = self.language_var.get()
+        previous_language = getattr(self, "current_language", "English")
+        if selection == previous_language:
+            return
+
+        model_name = self.voice_options.get(selection)
+        if not model_name or not hasattr(self, "tts_manager"):
+            self.language_var.set(previous_language)
+            return
+
+        def revert_selection():
+            self.language_var.set(previous_language)
+
+        try:
+            existing_text = self.tts_manager.getTypingText()
+        except Exception:
+            existing_text = ""
+        has_audio_text = bool(existing_text.strip())
+
+        # If nothing loaded yet, just switch voices and exit.
+        if not has_audio_text:
+            try:
+                self.tts_manager.set_voice_model(model_name)
+                self.current_language = selection
+                self.progress_bar_manager.reset_progress_bar()
+                self.text_manager.hide_results()
+            except FileNotFoundError as exc:
+                messagebox.showerror("Voice Not Found", str(exc))
+                revert_selection()
+            except Exception as exc:
+                messagebox.showerror("Voice Error", f"Could not switch voice:\n{exc}")
+                revert_selection()
+            return
+
+        file_key = getattr(self, "current_file_key", None)
+        new_lang_path = self.get_generation_path(file_key, language=selection) if file_key else None
+        new_audio_exists = bool(new_lang_path and os.path.isfile(new_lang_path))
+
+        try:
+            prompt_title = "Existing Audio Found" if new_audio_exists else "Regenerate Audio"
+            if new_audio_exists:
+                response = messagebox.askyesnocancel(
+                    prompt_title,
+                    f"Audio for this document already exists in {selection}.\n"
+                    "Yes: Use existing audio\nNo: Regenerate in new language\nCancel: Keep current language/audio"
+                )
+                if response is None:
+                    revert_selection()
+                    return
+                # Apply language change now
+                self.tts_manager.set_voice_model(model_name)
+                self.progress_bar_manager.reset_progress_bar()
+                self.text_manager.hide_results()
+                self.current_language = selection
+                if response is True:
+                    # Use saved audio
+                    if new_lang_path and not self.load_existing_generation(new_lang_path, existing_text):
+                        self.generate_tts_in_background(existing_text, save_key=file_key, language=selection)
+                else:
+                    self.generate_tts_in_background(existing_text, save_key=file_key, language=selection)
+            else:
+                regenerate = messagebox.askyesno(
+                    prompt_title,
+                    f"Would you like to generate the audio in {selection}?"
+                )
+                if not regenerate:
+                    revert_selection()
+                    return
+                self.tts_manager.set_voice_model(model_name)
+                self.progress_bar_manager.reset_progress_bar()
+                self.text_manager.hide_results()
+                self.current_language = selection
+                self.generate_tts_in_background(existing_text, save_key=file_key, language=selection)
+        except FileNotFoundError as exc:
+            messagebox.showerror("Voice Not Found", str(exc))
+            revert_selection()
+        except Exception as exc:
+            messagebox.showerror("Voice Error", f"Could not switch voice:\n{exc}")
+            revert_selection()
 
     def try_show_file_loaded_message(self):
         if self.pending_file_loaded_message and not self.details_dialog_open and getattr(self, "tts_from_file", False):
@@ -519,28 +649,32 @@ class AudioTypingTest:
         if hasattr(self, "loading_window") and self.loading_window.winfo_exists():
             self.loading_window.destroy()
 
-    def on_tts_ready(self):
+    def on_tts_ready(self, reload_path=None, text_content=None):
         self.hide_loading_window()
+        if reload_path and os.path.isfile(reload_path):
+            self.load_existing_generation(reload_path, text_content or self.tts_manager.getTypingText(), show_message=False)
         self.progress_bar_manager.update_audio_duration(speed=self.speed_var.get())
 
         if getattr(self, "tts_from_file", False):
             self.pending_file_loaded_message = True
             self.try_show_file_loaded_message()
 
-    def generate_tts_in_background(self, text, save_key=None):
+    def generate_tts_in_background(self, text, save_key=None, language=None):
         def task():
             self.tts_manager.TTSGenerate(text)
             self.tts_manager.prepareTTS(speed=self.speed_var.get())
+            reload_path = None
             if save_key:
-                self.save_generation_copy(save_key)
-            self.root.after(0, self.on_tts_ready)
+                self.save_generation_copy(save_key, language=language)
+                reload_path = self.get_generation_path(save_key, language=language)
+            self.root.after(0, lambda: self.on_tts_ready(reload_path, text))
 
         self.show_loading_window("Generating TTS...")
         threading.Thread(target=task, daemon=True).start()
 
-    def save_generation_copy(self, file_key):
+    def save_generation_copy(self, file_key, language=None):
         try:
-            target = self.get_generation_path(file_key)
+            target = self.get_generation_path(file_key, language=language)
             shutil.copy2(self.tts_manager.wav_file, target)
         except Exception:
             pass
