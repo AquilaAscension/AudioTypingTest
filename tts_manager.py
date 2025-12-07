@@ -39,6 +39,7 @@ class TTSManager:
         self.is_armed = False
         self.distortion_enabled = False
         self._clean_audio = None
+        self.playback_finished = False
 
         # Track last synthesis so we can re-synthesize if speed changes
         self._last_text = None
@@ -181,10 +182,12 @@ class TTSManager:
         self._clean_audio = None
         self._last_synth_scale = None
         self.TTSDuration = 0.0
+        self.playback_finished = False
 
     def TTSGenerate(self, input_text: str, length_scale: float | None = None):
         self.typingText = input_text  # keep for later re-synthesis if speed changes
         eff_scale = self.piper_length_scale if length_scale is None else float(length_scale)
+        self.playback_finished = False
 
         if self._use_embedded_voice:
             self._synthesize_with_embedded(input_text, eff_scale)
@@ -209,6 +212,7 @@ class TTSManager:
         self.audio_data = data.astype(np.float32)
         self.sample_rate = sr
         self.position = 0
+        self.playback_finished = False
         if self.sample_rate and len(self.audio_data):
             self.TTSDuration = len(self.audio_data) / float(self.sample_rate)
 
@@ -224,17 +228,32 @@ class TTSManager:
         self.position += frames
         if self.position >= len(self.audio_data):
             self.is_armed = False
+            self.playback_finished = True
             raise sd.CallbackStop
+
+    def _close_stream(self):
+        if self.stream:
+            try:
+                self.stream.stop()
+            except Exception:
+                pass
+            try:
+                self.stream.close()
+            except Exception:
+                pass
+            self.stream = None
 
     def playTTS(self, speed=1.0):
         if not self.is_armed:
             self.prepareTTS(speed)
+        self._close_stream()
         self.stream = sd.OutputStream(
             samplerate=self.sample_rate,
             channels=1,
             callback=self.play_callback
         )
         self.is_paused = False
+        self.playback_finished = False
         self.stream.start()
 
     def pauseTTS(self):
@@ -243,6 +262,7 @@ class TTSManager:
     def resumeTTS(self):
         if self.stream:
             self.is_paused = False
+            self.playback_finished = False
 
     def prepareTTS(self, speed=1.0):
         if self.use_synth_speed:
@@ -253,6 +273,15 @@ class TTSManager:
 
         self.load_audio()
         self.is_armed = True
+        self.playback_finished = False
+
+    def reset_playback(self):
+        """Stop any active stream and rewind to the start."""
+        self._close_stream()
+        self.position = 0
+        self.is_paused = True
+        self.playback_finished = False
+        self.is_armed = False
 
     def _soften_audio(self, data):
         if data.size == 0:

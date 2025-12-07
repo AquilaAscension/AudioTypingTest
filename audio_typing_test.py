@@ -52,6 +52,10 @@ class AudioTypingTest:
         self.current_details = []
         self.details_dialog_open = False
         self.pending_file_loaded_message = False
+        self.pending_audio_ready_message = False
+        self.speed_dirty = False
+        self.generating = False
+        self.regeneration_reason = None
 
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -68,6 +72,7 @@ class AudioTypingTest:
         self.tts_manager = TTSManager()
         self.tts_from_file = False
         self.progress_bar_manager = ProgressBarManager(self.root, self.tts_manager)
+        self.progress_bar_manager.set_on_complete(self.handle_playback_complete)
         self.text_manager = TextManager(self.root)
         self.text_manager.typing_box.bind("<KeyRelease>", self.on_typing)
         self.text_manager.typing_box.bind("<KeyPress>", self.start_timer_if_needed)
@@ -168,11 +173,11 @@ class AudioTypingTest:
         self.discard_button = tk.Button(self.root, text="Discard", command=self.discard_text)
         self.discard_button.grid(row=2, column=2, padx=10, pady=10, sticky="e")
 
-        self.pause_button = tk.Button(self.root, text="⏸", font=("Arial", 14), command=self.pause_progress_bar)
-        self.pause_button.grid(row=0, column=2, padx=10, pady=10, sticky="e")
+        self.play_pause_button = tk.Button(self.root, text="▶", font=("Arial", 14), command=self.toggle_play_pause)
+        self.play_pause_button.grid(row=0, column=2, padx=(10, 5), pady=10, sticky="w")
 
-        self.play_button = tk.Button(self.root, text="▶", font=("Arial", 14), command=self.resume_progress_bar)
-        self.play_button.grid(row=0, column=2, padx=10, pady=10, sticky="w")
+        self.reset_button = tk.Button(self.root, text="⟲", font=("Arial", 14), command=self.reset_audio)
+        self.reset_button.grid(row=0, column=2, padx=(5, 10), pady=10, sticky="e")
 
         self.speed_label = tk.Label(self.sidebar, text='TTS Speed:', font=("Times New Roman", 12))
         self.speed_label.grid(row=13, column=0, padx=10, pady=(20, 0), sticky="w")
@@ -180,21 +185,22 @@ class AudioTypingTest:
         self.speed_var = tk.DoubleVar(value=1.0)  # Default speed = 1.0
         self.speed_slider = tk.Scale(self.sidebar, from_=0.5, to=2.0, resolution=0.1,
                                     orient="horizontal", variable=self.speed_var,
-                                    length=200)
+                                    length=200, command=self.on_speed_dirty)
         self.speed_slider.grid(row=14, column=0, padx=10, pady=5, sticky="ew")
-
-
+        self.apply_speed_button = tk.Button(self.sidebar, text="Apply Speed (1.0x)", command=self.apply_speed_change, state="disabled")
+        self.apply_speed_button.grid(row=15, column=0, padx=10, pady=(5, 15), sticky="ew")
 
         self.highlight_label = tk.Label(self.sidebar, text="Show Spelling Errors:", font=("Times New Roman", 12))
-        self.highlight_label.grid(row=15, column=0, padx=10, pady=(20, 0), sticky="w")
+        self.highlight_label.grid(row=16, column=0, padx=10, pady=(20, 0), sticky="w")
 
         self.highlight_var = tk.StringVar(value="off_highlight")  # Default = OFF
 
         self.highlight_on = ttk.Radiobutton(self.sidebar, text="Yes", variable=self.highlight_var, value="on_highlight")
-        self.highlight_on.grid(row=16, column=0, padx=10, sticky="w")
+        self.highlight_on.grid(row=17, column=0, padx=10, sticky="w")
 
         self.highlight_off = ttk.Radiobutton(self.sidebar, text="No", variable=self.highlight_var, value="off_highlight")
-        self.highlight_off.grid(row=17, column=0, padx=10, sticky="w")
+        self.highlight_off.grid(row=18, column=0, padx=10, sticky="w")
+        self.update_apply_speed_button()
 
     def on_close(self):
         # Stop timers/UI loops
@@ -315,8 +321,12 @@ class AudioTypingTest:
             self.tts_manager._last_synth_scale = target_scale
             self.tts_manager.load_audio()
             self.tts_manager.is_armed = True
-            self.tts_manager.is_paused = False
+            self.tts_manager.is_paused = True
             self.progress_bar_manager.update_audio_duration(speed=self.speed_var.get())
+            self.progress_bar_manager.reset_progress_bar()
+            self.update_play_pause_button(False)
+            self.speed_dirty = False
+            self.update_apply_speed_button()
             if show_message:
                 messagebox.showinfo("Audio Loaded", "Existing audio has been loaded for this document.")
             return True
@@ -378,6 +388,7 @@ class AudioTypingTest:
                 self.tts_manager.set_voice_model(model_name)
                 self.current_language = selection
                 self.progress_bar_manager.reset_progress_bar()
+                self.update_play_pause_button(False)
                 self.text_manager.hide_results()
             except FileNotFoundError as exc:
                 messagebox.showerror("Voice Not Found", str(exc))
@@ -405,13 +416,16 @@ class AudioTypingTest:
                 # Apply language change now
                 self.tts_manager.set_voice_model(model_name)
                 self.progress_bar_manager.reset_progress_bar()
+                self.update_play_pause_button(False)
                 self.text_manager.hide_results()
                 self.current_language = selection
                 if response is True:
                     # Use saved audio
                     if new_lang_path and not self.load_existing_generation(new_lang_path, existing_text):
+                        self.regeneration_reason = "language"
                         self.generate_tts_in_background(existing_text, save_key=file_key, language=selection)
                 else:
+                    self.regeneration_reason = "language"
                     self.generate_tts_in_background(existing_text, save_key=file_key, language=selection)
             else:
                 regenerate = messagebox.askyesno(
@@ -423,8 +437,10 @@ class AudioTypingTest:
                     return
                 self.tts_manager.set_voice_model(model_name)
                 self.progress_bar_manager.reset_progress_bar()
+                self.update_play_pause_button(False)
                 self.text_manager.hide_results()
                 self.current_language = selection
+                self.regeneration_reason = "language"
                 self.generate_tts_in_background(existing_text, save_key=file_key, language=selection)
         except FileNotFoundError as exc:
             messagebox.showerror("Voice Not Found", str(exc))
@@ -434,7 +450,18 @@ class AudioTypingTest:
             revert_selection()
 
     def try_show_file_loaded_message(self):
-        if self.pending_file_loaded_message and not self.details_dialog_open and getattr(self, "tts_from_file", False):
+        # Deprecated shim; route to unified message handler
+        self.try_show_pending_messages()
+
+    def try_show_pending_messages(self):
+        if self.details_dialog_open:
+            return
+
+        if self.pending_audio_ready_message:
+            self.pending_audio_ready_message = False
+            messagebox.showinfo("Audio Ready", "New audio has been generated and loaded.")
+
+        if self.pending_file_loaded_message and getattr(self, "tts_from_file", False):
             self.pending_file_loaded_message = False
             messagebox.showinfo("File Loaded", "The file has been successfully loaded for the typing test.")
 
@@ -552,7 +579,7 @@ class AudioTypingTest:
             dialog.wait_window()
         finally:
             self.details_dialog_open = False
-        self.try_show_file_loaded_message()
+        self.try_show_pending_messages()
         return result["value"]
 
     def build_road_variant_map(self):
@@ -596,39 +623,154 @@ class AudioTypingTest:
         self.root.after(5000, self.reset_ui)
 
     def reset_ui(self):
-        self.text_manager.typing_box.tag_remove("error", "1.0", "end")
-        self.text_manager.hide_results()
-        self.text_manager.clear_text()
-        self.progress_bar_manager.reset_progress_bar()
-        self.start_time = None
+        self.reset_for_new_audio()
 
     def discard_text(self):
         self.stop_timer_display()
         self.text_manager.clear_text()
         self.start_time = None
 
-    def pause_progress_bar(self):
+    def update_play_pause_button(self, playing=False):
+        if hasattr(self, "play_pause_button"):
+            self.play_pause_button.config(text="⏸" if playing else "▶")
+
+    def is_audio_playing(self):
+        stream = getattr(self.tts_manager, "stream", None)
+        active = bool(getattr(stream, "active", False))
+        return stream is not None and active and not self.tts_manager.is_paused
+
+    def is_audio_paused(self):
+        stream = getattr(self.tts_manager, "stream", None)
+        return stream is not None and self.tts_manager.is_paused
+
+    def handle_playback_complete(self):
+        # Sync button state when audio naturally ends
+        self.tts_manager.pauseTTS()
+        self.update_play_pause_button(False)
+
+    def pause_audio(self):
         self.tts_manager.pauseTTS()
         self.progress_bar_manager.pause_progress_bar()
+        self.update_play_pause_button(False)
 
-    def resume_progress_bar(self):
+    def reset_for_new_audio(self):
+        self.stop_timer_display()
+        self.start_time = None
+        self.text_manager.hide_results()
+        # Clear any previous highlights/errors from the typing box
+        self.text_manager.typing_box.tag_remove("error", "1.0", "end")
+        self.text_manager.typing_box.tag_remove("correct", "1.0", "end")
+        self.text_manager.typing_box.tag_remove("incorrect", "1.0", "end")
+        self.text_manager.clear_text()
+        self.reset_audio(auto_resume=False)
+        self.update_apply_speed_button()
+
+    def toggle_play_pause(self):
         if not self.tts_manager.getTypingText().strip():
             messagebox.showwarning("No Document Loaded", "Please load a document before starting the audio.")
             return
 
+        paused = self.is_audio_paused()
         speed = self.speed_var.get()
+        need_prepare = not self.tts_manager.is_armed
 
-        if self.tts_manager.is_paused:
+        if self.is_audio_playing():
+            self.pause_audio()
+            return
+
+        if getattr(self.tts_manager, "use_synth_speed", False):
+            try:
+                target_scale = self.tts_manager._to_piper_scale(speed)
+                last_scale = getattr(self.tts_manager, "_last_synth_scale", None)
+                if last_scale is None or abs(target_scale - last_scale) > 1e-6:
+                    need_prepare = True
+            except Exception:
+                need_prepare = True
+
+        if getattr(self.tts_manager, "playback_finished", False):
+            self.tts_manager.reset_playback()
+            paused = False
+            need_prepare = True
+
+        if paused and not need_prepare:
             self.tts_manager.resumeTTS()
             self.progress_bar_manager.resume_progress_bar()
         else:
-            if not self.tts_manager.is_armed:
+            if need_prepare:
                 self.tts_manager.prepareTTS(speed=speed)
-
             self.tts_manager.playTTS(speed=speed)
             self.progress_bar_manager.start_progress_bar(speed=speed)
 
+        self.update_play_pause_button(True)
+
+    def reset_audio(self, auto_resume=None):
+        """Reset playback to start; optionally resume if it was playing."""
+        was_playing = self.is_audio_playing()
+        should_resume = was_playing if auto_resume is None else bool(auto_resume)
+        has_text = bool(self.tts_manager.getTypingText().strip())
+        speed = self.speed_var.get()
+
+        self.tts_manager.reset_playback()
+        self.progress_bar_manager.reset_progress_bar()
+        if self.tts_manager.audio_data is not None:
+            self.progress_bar_manager.update_audio_duration(speed=speed)
+
+        if not has_text or self.tts_manager.audio_data is None:
+            self.update_play_pause_button(False)
+            return
+
+        # Re-arm audio at the beginning
+        self.tts_manager.prepareTTS(speed=speed)
+
+        if should_resume:
+            self.tts_manager.playTTS(speed=speed)
+            self.progress_bar_manager.start_progress_bar(speed=speed)
+            self.update_play_pause_button(True)
+        else:
+            self.update_play_pause_button(False)
+
+    def on_speed_dirty(self, *_):
+        # Mark speed as needing apply and update button label/state
+        self.speed_dirty = True
+        self.update_apply_speed_button()
+
+    def update_apply_speed_button(self):
+        if not hasattr(self, "apply_speed_button"):
+            return
+        label = f"Apply Speed ({self.speed_var.get():.1f}x)"
+        self.apply_speed_button.config(text=label)
+        manager = getattr(self, "tts_manager", None)
+        text_loaded = bool(manager and manager.getTypingText().strip())
+        enabled = self.speed_dirty and text_loaded and not self.generating
+        self.apply_speed_button.config(state="normal" if enabled else "disabled")
+
+    def apply_speed_change(self):
+        if self.generating:
+            return
+
+        text = self.tts_manager.getTypingText()
+        if not text.strip():
+            messagebox.showwarning("No Document Loaded", "Please load a document before applying speed changes.")
+            self.speed_dirty = False
+            self.update_apply_speed_button()
+            return
+
+        # Immediately stop and reset playback/test state
+        self.reset_for_new_audio()
+        self.speed_dirty = False
+        self.update_apply_speed_button()
+
+        self.generate_tts_in_background(
+            text,
+            save_key=getattr(self, "current_file_key", None),
+            language=self.current_language,
+            message="Regenerating audio..."
+        )
+        self.regeneration_reason = "speed"
+
     def show_loading_window(self, message="Generating TTS..."):
+        self.generating = True
+        self.update_apply_speed_button()
         self.loading_window = tk.Toplevel(self.root)
         self.loading_window.title("Please Wait")
         self.loading_window.geometry("300x100")
@@ -648,18 +790,25 @@ class AudioTypingTest:
     def hide_loading_window(self):
         if hasattr(self, "loading_window") and self.loading_window.winfo_exists():
             self.loading_window.destroy()
+        self.generating = False
+        self.update_apply_speed_button()
 
     def on_tts_ready(self, reload_path=None, text_content=None):
         self.hide_loading_window()
         if reload_path and os.path.isfile(reload_path):
             self.load_existing_generation(reload_path, text_content or self.tts_manager.getTypingText(), show_message=False)
         self.progress_bar_manager.update_audio_duration(speed=self.speed_var.get())
+        self.reset_for_new_audio()
+        self.speed_dirty = False
+        self.update_apply_speed_button()
+        self.pending_audio_ready_message = True
 
-        if getattr(self, "tts_from_file", False):
+        if getattr(self, "tts_from_file", False) and not self.regeneration_reason:
             self.pending_file_loaded_message = True
-            self.try_show_file_loaded_message()
+        self.try_show_pending_messages()
+        self.regeneration_reason = None
 
-    def generate_tts_in_background(self, text, save_key=None, language=None):
+    def generate_tts_in_background(self, text, save_key=None, language=None, message="Generating TTS..."):
         def task():
             self.tts_manager.TTSGenerate(text)
             self.tts_manager.prepareTTS(speed=self.speed_var.get())
@@ -669,7 +818,7 @@ class AudioTypingTest:
                 reload_path = self.get_generation_path(save_key, language=language)
             self.root.after(0, lambda: self.on_tts_ready(reload_path, text))
 
-        self.show_loading_window("Generating TTS...")
+        self.show_loading_window(message)
         threading.Thread(target=task, daemon=True).start()
 
     def save_generation_copy(self, file_key, language=None):
