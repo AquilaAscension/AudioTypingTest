@@ -117,6 +117,16 @@ class AudioTypingTest:
             value="off_distortion",
             command=self.update_distortion_setting
         )
+
+        self.sign_in_button = tk.Button(self.sidebar, text="Sign In", command=self.sign_in)
+        self.sign_in_button.grid(row=11, column=0, padx=10, pady=5, sticky="esw")
+        
+        self.register_button = tk.Button(self.sidebar, text="Register New Account", command=lambda: self.register_account())
+        self.register_button.grid(row=12, column=0, padx=10, pady=5, sticky="esw") 
+        
+        self.load_file_button = tk.Button(self.sidebar, text="Load File for TTS", command=self.load_file_for_tts)
+        self.load_file_button.grid(row=13, column=0, padx=10, pady=10, sticky="ew")
+
         self.distortion_off.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
         self.distortion_status.set("off_distortion")
 
@@ -161,12 +171,6 @@ class AudioTypingTest:
         self.password_entry = tk.Entry(self.sidebar, textvariable=self.password_value, show="*")
         self.password_entry.grid(row=10, column=0, padx=10, pady=5, sticky="esw")
 
-        self.sign_in_button = tk.Button(self.sidebar, text="Sign In", command=self.sign_in)
-        self.sign_in_button.grid(row=11, column=0, padx=10, pady=5, sticky="esw")
-
-        self.load_file_button = tk.Button(self.sidebar, text="Load File for TTS", command=self.load_file_for_tts)
-        self.load_file_button.grid(row=12, column=0, padx=10, pady=10, sticky="ew")
-
         self.submit_button = tk.Button(self.root, text="Submit", command=self.submit_text)
         self.submit_button.grid(row=2, column=2, padx=10, pady=10, sticky="w")
 
@@ -180,26 +184,26 @@ class AudioTypingTest:
         self.reset_button.grid(row=0, column=2, padx=(5, 10), pady=10, sticky="e")
 
         self.speed_label = tk.Label(self.sidebar, text='TTS Speed:', font=("Times New Roman", 12))
-        self.speed_label.grid(row=13, column=0, padx=10, pady=(20, 0), sticky="w")
+        self.speed_label.grid(row=14, column=0, padx=10, pady=(20, 0), sticky="w")
 
         self.speed_var = tk.DoubleVar(value=1.0)  # Default speed = 1.0
         self.speed_slider = tk.Scale(self.sidebar, from_=0.5, to=2.0, resolution=0.1,
                                     orient="horizontal", variable=self.speed_var,
                                     length=200, command=self.on_speed_dirty)
-        self.speed_slider.grid(row=14, column=0, padx=10, pady=5, sticky="ew")
+        self.speed_slider.grid(row=15, column=0, padx=10, pady=5, sticky="ew")
         self.apply_speed_button = tk.Button(self.sidebar, text="Apply Speed (1.0x)", command=self.apply_speed_change, state="disabled")
-        self.apply_speed_button.grid(row=15, column=0, padx=10, pady=(5, 15), sticky="ew")
+        self.apply_speed_button.grid(row=16, column=0, padx=10, pady=(5, 15), sticky="ew")
 
         self.highlight_label = tk.Label(self.sidebar, text="Show Spelling Errors:", font=("Times New Roman", 12))
-        self.highlight_label.grid(row=16, column=0, padx=10, pady=(20, 0), sticky="w")
+        self.highlight_label.grid(row=17, column=0, padx=10, pady=(20, 0), sticky="w")
 
         self.highlight_var = tk.StringVar(value="off_highlight")  # Default = OFF
 
         self.highlight_on = ttk.Radiobutton(self.sidebar, text="Yes", variable=self.highlight_var, value="on_highlight")
-        self.highlight_on.grid(row=17, column=0, padx=10, sticky="w")
+        self.highlight_on.grid(row=18, column=0, padx=10, sticky="w")
 
         self.highlight_off = ttk.Radiobutton(self.sidebar, text="No", variable=self.highlight_var, value="off_highlight")
-        self.highlight_off.grid(row=18, column=0, padx=10, sticky="w")
+        self.highlight_off.grid(row=19, column=0, padx=10, sticky="w")
         self.update_apply_speed_button()
 
     def on_close(self):
@@ -231,8 +235,95 @@ class AudioTypingTest:
         # Close the window
         self.root.destroy()
 
+    # Account Management Configuration
+    def get_user_db_path(self):
+        return os.path.join(self.details_dir, "users.json")
+
+    def load_user_db(self):
+        #Loads the user database
+        db_path = self.get_user_db_path()
+        if os.path.exists(db_path):
+            try:
+                with open(db_path, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                # Handle corrupted JSON file
+                return {}
+        return {}
+
+    def save_user_db(self, user_db):
+        db_path = self.get_user_db_path()
+        with open(db_path, 'w') as f:
+            json.dump(user_db, f, indent=4)
+
+    def hash_password(self, password):
+        return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
     def sign_in(self):
-        return "0"
+        username = self.username_value.get().strip()
+        password = self.password_value.get()
+        user_db = self.load_user_db()
+
+        if not username or not password:
+            messagebox.showwarning("Login Error", "Please enter both username and password.")
+            return
+
+        if username in user_db:
+            if self.hash_password(password) == user_db[username]:
+                messagebox.showinfo("Success", f"Welcome, {username}!")
+                self.set_logged_in_state(username)
+            else:
+                self.handle_invalid_credentials(username, "Invalid password.")
+        else:
+            self.handle_invalid_credentials(username, "Username not found.")
+
+    def handle_invalid_credentials(self, username, error_message):
+        self.set_logged_in_state(None)
+        should_register = messagebox.askyesno(
+            "Login Failed",
+            f"{error_message} Would you like to register a new account for '{username}'?"
+        )
+        if should_register:
+            self.register_account(username)
+
+    def register_account(self, suggested_username=None):
+        username = suggested_username if suggested_username else self.username_value.get().strip()
+        password = self.password_value.get()
+        user_db = self.load_user_db()
+
+        if not username:
+             messagebox.showerror("Registration Error", "Username cannot be empty.")
+             return
+        if len(password) < 4:
+            messagebox.showerror("Registration Error", "Password must be at least 4 characters long.")
+            return
+
+        if username in user_db:
+            messagebox.showwarning("Registration Error", f"Account for '{username}' already exists. Please sign in.")
+            return
+
+        # Register the new user
+        user_db[username] = self.hash_password(password)
+        self.save_user_db(user_db)
+        
+        messagebox.showinfo("Registration Successful", f"Account created for {username}. You are now signed in.")
+        self.set_logged_in_state(username)
+
+    def set_logged_in_state(self, username):
+        """Updates the UI based on logged-in status."""
+        
+        if username:
+            self.sign_in_button.config(text=f"Signed in as {username}", state="disabled", style="success.TButton")
+            self.username_entry.config(state="disabled")
+            self.password_entry.config(state="disabled")
+            # Clear password field after successful login
+            self.password_value.set("") 
+        else:
+            self.sign_in_button.config(text="Sign In", state="normal", style="TButton")
+            self.username_entry.config(state="normal")
+            self.password_entry.config(state="normal")
+
+        self.current_username = username
 
     def load_file_for_tts(self):
         file_path = filedialog.askopenfilename(
@@ -617,10 +708,10 @@ class AudioTypingTest:
         self.progress_bar_manager.hide_progress_bar()
         self.text_manager.show_results(results)
         self.text_manager.highlight_submission_errors(self.tts_manager.getTypingText())
-        username = self.username_value.get().strip() or "Guest"
+        username = self.current_username if self.current_username else "Guest"
         self.save_score_to_csv(username, wpm, accuracy, details_score)
         messagebox.showinfo("Score Saved", f"Results saved for {username}.")
-        self.root.after(5000, self.reset_ui)
+        self.root.after(5000, self.reset_ui) 
 
     def reset_ui(self):
         self.reset_for_new_audio()
