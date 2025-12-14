@@ -1,23 +1,64 @@
 import tkinter as tk
 import re
 
+
 class TextManager:
-    def __init__(self, root):
+    def __init__(self, root, palette, fonts):
         self.root = root
-        self.typing_box = tk.Text(root, height=10, width=50, font=("Arial", 14))
-        self.typing_box.grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
-        self.results_label = tk.Label(root, text="", font=("Arial", 24, "bold"), fg="blue")
-        self.results_label.grid(row=0, column=1, pady=10, sticky="s")
-        self.results_label.grid_remove()
+        self.palette = palette
+        self.fonts = fonts
+        self.root.configure(bg=self.palette["bg"])
 
-        self.typing_box.tag_configure("correct", foreground="black")
-        self.typing_box.tag_configure("incorrect", foreground="red")
+        header = tk.Frame(self.root, bg=self.palette["bg"])
+        header.pack(fill="x", pady=(0, 8))
 
-        self.timer_label = tk.Label(self.root, text="Time: 0.0s", font=("Arial", 16, "bold"), fg="black")
-        self.timer_label.grid(row=0, column=1, sticky="e", padx=20)
-        self.timer_label.grid_remove()  # Hide initially
+        self.results_label = tk.Label(header, text="", font=self.fonts["display"], fg=self.palette["accent"], bg=self.palette["bg"])
+        self.results_label.pack(side="left")
+        self.results_label.pack_forget()
 
+        self.timer_label = tk.Label(header, text="Time: 0.0s", font=self.fonts["caption"], fg=self.palette["muted"], bg=self.palette["bg"])
+        self.timer_label.pack(side="right")
+        self.timer_label.pack_forget()
 
+        text_shell = tk.Frame(self.root, bg=self.palette["bg"])
+        text_shell.pack(fill="both", expand=True)
+
+        text_container = tk.Frame(text_shell, bg=self.palette["bg"])
+        text_container.pack(fill="both", expand=True, padx=2, pady=2)
+        shadow_dark = tk.Frame(text_container, bg=self.palette["shadow_dark"], bd=0, highlightthickness=0)
+        shadow_dark.place(relx=0, rely=0, relwidth=1, relheight=1, x=8, y=8)
+        shadow_light = tk.Frame(text_container, bg=self.palette["shadow_light"], bd=0, highlightthickness=0)
+        shadow_light.place(relx=0, rely=0, relwidth=1, relheight=1, x=-4, y=-4)
+
+        self.text_frame = tk.Frame(
+            text_container,
+            bg=self.palette["sunken"],
+            bd=0,
+            relief="flat",
+            highlightthickness=0
+        )
+        self.text_frame.pack(fill="both", expand=True, padx=6, pady=6)
+
+        self.typing_box = tk.Text(
+            self.text_frame,
+            height=12,
+            width=50,
+            font=self.fonts["mono"],
+            bg=self.palette["sunken"],
+            fg=self.palette["text"],
+            insertbackground=self.palette["accent"],
+            selectbackground=self.palette["accent_soft"],
+            selectforeground=self.palette["bg"],
+            relief="flat",
+            bd=0,
+            padx=4,
+            pady=4,
+            highlightthickness=0
+        )
+        self.typing_box.pack(fill="both", expand=True, padx=8, pady=8)
+
+        self.typing_box.tag_configure("correct", foreground=self.palette["text"])
+        self.typing_box.tag_configure("incorrect", foreground=self.palette["danger"])
 
     def get_text(self):
         return self.typing_box.get("1.0", "end-1c")
@@ -27,15 +68,21 @@ class TextManager:
 
     def show_results(self, results):
         self.results_label.config(text=results)
-        self.results_label.grid()
+        self.results_label.pack(side="left")
 
     def hide_results(self):
-        self.results_label.grid_remove()
+        self.results_label.pack_forget()
+
+    def show_timer(self):
+        self.timer_label.pack(side="right")
+
+    def hide_timer(self):
+        self.timer_label.pack_forget()
 
     def highlight_typing_progress(self, user_text, reference_text, highlight_enabled=True):
         if not highlight_enabled:
             return
-        
+
         def normalize(text):
             return re.sub(r'\s+', '', re.sub(r'[^\w\s]', '', text)).lower()
 
@@ -84,5 +131,4 @@ class TextManager:
 
             index += len(user_word) + 1  # move to next word (includes the space)
 
-        self.typing_box.tag_config("error", background="#ffcccc")  # light red
-
+        self.typing_box.tag_config("error", background=self.palette["accent_soft"])

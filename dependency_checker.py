@@ -13,8 +13,7 @@ REQUIRED_LIBRARIES = {
     "sounddevice": "sounddevice",
     "soundfile": "soundfile",
     "numpy": "numpy",
-    "scipy": "scipy",
-    "ttkbootstrap": "ttkbootstrap"
+    "scipy": "scipy"
 }
 
 
@@ -28,4 +27,3 @@ def ensure_dependencies_installed():
                 print(f"Installed: {pip_name}")
             except Exception as e:
                 print(f"Failed to install {pip_name}: {e}")
-

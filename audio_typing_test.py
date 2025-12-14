@@ -1,7 +1,9 @@
 import tkinter as tk
-import ttkbootstrap as ttk
+import tkinter.ttk as ttk
 from tkinter import filedialog
 from tkinter import messagebox
+from tkinter import font as tkfont
+import importlib
 import docx
 import PyPDF2
 import time
@@ -16,6 +18,34 @@ import shutil
 import base64
 import secrets
 from pathlib import Path
+
+NEUMORPH_COLORS = {
+    "bg": "#e7ebf3",
+    "sunken": "#dfe4ed",
+    "shadow_light": "#f7f9ff",
+    "shadow_dark": "#c7cfdd",
+    "text": "#1f2a44",
+    "muted": "#5c657a",
+    "accent": "#6e8ff5",
+    "accent_dark": "#5773d4",
+    "accent_soft": "#a6b9ff",
+    "success": "#52c7ac",
+    "danger": "#e17a7a"
+}
+
+if "ttkbootstrap" in sys.modules:
+    sys.modules.pop("ttkbootstrap", None)
+ttk = importlib.import_module("tkinter.ttk")
+
+NEUMORPH_FONTS = {
+    "title": ("Segoe UI", 32, "bold"),
+    "heading": ("Segoe UI Semibold", 16),
+    "subtitle": ("Segoe UI", 12),
+    "body": ("Segoe UI", 11),
+    "display": ("Segoe UI", 18, "bold"),
+    "mono": ("Cascadia Code", 12),
+    "caption": ("Segoe UI", 10)
+}
 
 ROAD_VARIATIONS = {
     "street": ["street", "st", "st."],
@@ -44,8 +74,9 @@ class AudioTypingTest:
         self.root = root
         self.root.title("echoType")
 
-        root.tk.call("source", "azure.tcl")
-        root.tk.call("set_theme", "dark")
+        self.colors = NEUMORPH_COLORS
+        self.fonts = NEUMORPH_FONTS
+        self._init_neumorphic_theme()
 
         self.runtime_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
         self.config_path = self.runtime_dir / "config.json"
@@ -88,9 +119,14 @@ class AudioTypingTest:
         self.setup_ui()
         self.tts_manager = TTSManager(filename=str(self.tts_temp_file))
         self.tts_from_file = False
-        self.progress_bar_manager = ProgressBarManager(self.root, self.tts_manager)
+        self.progress_bar_manager = ProgressBarManager(
+            self.root,
+            self.tts_manager,
+            bar_container=getattr(self, "progress_area", None),
+            style_name="Neumo.Horizontal.TProgressbar"
+        )
         self.progress_bar_manager.set_on_complete(self.handle_playback_complete)
-        self.text_manager = TextManager(self.root)
+        self.text_manager = TextManager(self.editor_container, palette=self.colors, fonts=self.fonts)
         self.text_manager.typing_box.bind("<KeyRelease>", self.on_typing)
         self.text_manager.typing_box.bind("<KeyPress>", self.start_timer_if_needed)
         self.start_time = None
@@ -98,6 +134,164 @@ class AudioTypingTest:
         self.road_variant_map = self.build_road_variant_map()
         self.apply_saved_settings()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def _init_neumorphic_theme(self):
+        self.root.configure(bg=self.colors["bg"])
+
+        try:
+            default_font = tkfont.nametofont("TkDefaultFont")
+            default_font.configure(family=self.fonts["body"][0], size=self.fonts["body"][1])
+            text_font = tkfont.nametofont("TkTextFont")
+            text_font.configure(family=self.fonts["body"][0], size=self.fonts["body"][1])
+        except Exception:
+            pass
+
+        style = ttk.Style()
+        base_theme = "clam"
+        try:
+            style.theme_use(base_theme)
+        except Exception:
+            base_theme = style.theme_use()
+
+        if "neumorphic" not in style.theme_names():
+            style.theme_create(
+                "neumorphic",
+                parent=base_theme,
+                settings={
+                    ".": {
+                        "configure": {
+                            "background": self.colors["bg"],
+                            "foreground": self.colors["text"],
+                            "fieldbackground": self.colors["sunken"],
+                            "font": self.fonts["body"],
+                            "padding": 0
+                        }
+                    },
+                    "TFrame": {"configure": {"background": self.colors["bg"]}},
+                    "TLabel": {"configure": {"background": self.colors["bg"], "foreground": self.colors["text"], "padding": 0}},
+                    "TLabelframe": {"configure": {"background": self.colors["bg"], "foreground": self.colors["muted"], "borderwidth": 0, "padding": 8}},
+                    "TLabelframe.Label": {"configure": {"font": self.fonts["subtitle"], "foreground": self.colors["muted"]}},
+                    "TEntry": {"configure": {"fieldbackground": self.colors["sunken"], "insertcolor": self.colors["accent"], "borderwidth": 0}},
+                    "TCombobox": {"configure": {"fieldbackground": self.colors["sunken"], "padding": 6}},
+                    "TRadiobutton": {"configure": {"background": self.colors["bg"], "foreground": self.colors["text"], "padding": 6}},
+                    "Horizontal.TProgressbar": {"configure": {"background": self.colors["accent"], "troughcolor": self.colors["sunken"], "bordercolor": self.colors["bg"], "lightcolor": self.colors["shadow_light"], "darkcolor": self.colors["shadow_dark"]}},
+                }
+            )
+        style.theme_use("neumorphic")
+        self.style = style
+
+        self.style.configure("Title.TLabel", font=self.fonts["title"], foreground=self.colors["text"], padding=0)
+        self.style.configure("Heading.TLabel", font=self.fonts["heading"], foreground=self.colors["text"], padding=0)
+        self.style.configure("Muted.TLabel", font=self.fonts["caption"], foreground=self.colors["muted"], padding=0)
+        self.style.configure("Tag.TLabel", font=self.fonts["caption"], foreground=self.colors["text"], padding=(10, 4), background=self.colors["bg"], borderwidth=0, relief="flat")
+
+        btn_base = {
+            "padding": (14, 10),
+            "borderwidth": 0,
+            "relief": "flat",
+            "background": self.colors["bg"],
+            "foreground": self.colors["text"],
+            "focuscolor": self.colors["shadow_light"],
+        }
+        self.style.configure("Neumo.TButton", **btn_base, lightcolor=self.colors["shadow_light"], darkcolor=self.colors["shadow_dark"])
+        self.style.map(
+            "Neumo.TButton",
+            background=[("pressed", self.colors["sunken"]), ("active", self.colors["shadow_light"])],
+            relief=[("pressed", "sunken")]
+        )
+
+        accent_base = dict(btn_base)
+        accent_base.update(
+            background=self.colors["accent"],
+            foreground="white",
+            focusthickness=3,
+            focuscolor=self.colors["accent_soft"],
+        )
+        self.style.configure("NeumoAccent.TButton", **accent_base)
+        self.style.map(
+            "NeumoAccent.TButton",
+            background=[("pressed", self.colors["accent_dark"]), ("active", self.colors["accent_dark"])]
+        )
+
+        danger_base = dict(btn_base)
+        danger_base.update(background=self.colors["danger"], foreground="white")
+        self.style.configure("NeumoDanger.TButton", **danger_base)
+        self.style.map(
+            "NeumoDanger.TButton",
+            background=[("pressed", "#c56262"), ("active", "#c56262")]
+        )
+
+        icon_base = dict(btn_base)
+        icon_base.update(padding=(10, 8), font=self.fonts["heading"])
+        self.style.configure("Icon.TButton", **icon_base)
+        self.style.map(
+            "Icon.TButton",
+            background=[("pressed", self.colors["sunken"]), ("active", self.colors["shadow_light"])],
+            relief=[("pressed", "sunken")]
+        )
+
+        self.style.configure(
+            "Neumo.TEntry",
+            fieldbackground=self.colors["sunken"],
+            background=self.colors["sunken"],
+            foreground=self.colors["text"],
+            padding=10,
+            relief="flat",
+        )
+        self.style.configure(
+            "Neumo.TCombobox",
+            fieldbackground=self.colors["sunken"],
+            background=self.colors["sunken"],
+            foreground=self.colors["text"],
+            padding=8,
+        )
+
+        self.style.configure("Neumo.TRadiobutton", background=self.colors["bg"], foreground=self.colors["text"], padding=6)
+        self.style.map("Neumo.TRadiobutton", indicatorcolor=[("selected", self.colors["accent"]), ("!selected", self.colors["shadow_dark"])])
+
+        self.style.configure(
+            "Neumo.Horizontal.TProgressbar",
+            thickness=14,
+            troughcolor=self.colors["sunken"],
+            background=self.colors["accent"],
+            bordercolor=self.colors["bg"],
+            lightcolor=self.colors["shadow_light"],
+            darkcolor=self.colors["shadow_dark"]
+        )
+
+        self.root.option_add("*TCombobox*Listbox.background", self.colors["sunken"])
+        self.root.option_add("*TCombobox*Listbox.foreground", self.colors["text"])
+        self.root.option_add("*TCombobox*Listbox.font", self.fonts["body"])
+        self.root.option_add("*Entry.font", self.fonts["body"])
+        self.root.option_add("*Text.font", self.fonts["body"])
+        self.root.option_add("*Label.background", self.colors["bg"])
+        self.root.option_add("*Label.borderWidth", 0)
+        self.root.option_add("*TLabel.padding", 0)
+
+    def _build_card(self, parent, padding=16):
+        container = tk.Frame(parent, bg=self.colors["bg"])
+        shadow_dark = tk.Frame(container, bg=self.colors["shadow_dark"], bd=0, highlightthickness=0)
+        shadow_dark.place(relx=0, rely=0, relwidth=1, relheight=1, x=6, y=6)
+        shadow_light = tk.Frame(container, bg=self.colors["shadow_light"], bd=0, highlightthickness=0)
+        shadow_light.place(relx=0, rely=0, relwidth=1, relheight=1, x=-4, y=-4)
+        card = tk.Frame(
+            container,
+            bg=self.colors["bg"],
+            bd=0,
+            relief="flat",
+            highlightthickness=0
+        )
+        card.pack(fill="both", expand=True, padx=(0, 10), pady=(0, 10))
+        content = tk.Frame(card, bg=self.colors["bg"], padx=padding, pady=padding)
+        content.pack(fill="both", expand=True)
+        return container, content
+
+    def _section_label(self, parent, text):
+        return ttk.Label(parent, text=text, style="Heading.TLabel")
+
+    def _refresh_language_chip(self):
+        if hasattr(self, "language_chip"):
+            self.language_chip.config(text=f"Language: {self.language_var.get()}")
 
     # Configuration and path utilities
     def default_app_data_dir(self):
@@ -273,6 +467,7 @@ class AudioTypingTest:
         def make_wrapper(func):
             def wrapper(*args, **kwargs):
                 args, kwargs = self._normalize_messagebox_args(*args, **kwargs)
+                kwargs.setdefault("parent", self.root)
                 try:
                     self.root.attributes("-topmost", True)
                 except Exception:
@@ -333,67 +528,80 @@ class AudioTypingTest:
 
     def setup_ui(self):
         self.root.columnconfigure(0, weight=1)
-        self.root.columnconfigure(1, weight=3)
-        self.root.columnconfigure(2, weight=1)
         self.root.rowconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=4)
-        self.root.rowconfigure(2, weight=1)
 
-        tk.Label(self.root, text="echoType", font=("Calibri", 16, "bold")).grid(row=0, column=1, pady=10, sticky="n")
+        shell = tk.Frame(self.root, bg=self.colors["bg"], padx=28, pady=28)
+        shell.grid(row=0, column=0, sticky="nsew")
+        shell.columnconfigure(0, weight=1)
+        shell.columnconfigure(1, weight=2)
+        shell.rowconfigure(0, weight=1)
 
-        self.sidebar = tk.Frame(self.root, width=500, bd=1 , relief="raised")
-        self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsw")
+        self.sidebar, sidebar = self._build_card(shell, padding=18)
+        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
+        sidebar.columnconfigure(0, weight=1)
 
-        self.settings_label = tk.Label(self.sidebar, text='Settings', font=("Calibri", 14))
-        self.settings_label.grid(row=0, column=0, padx=10, pady=10, sticky="new")
+        self.main_panel, main_content = self._build_card(shell, padding=22)
+        self.main_panel.grid(row=0, column=1, sticky="nsew")
+        main_content.rowconfigure(3, weight=1)
+        main_content.columnconfigure(0, weight=1)
 
-        self.config_button = tk.Button(self.sidebar, text="Configuration Settings", command=self.open_config_settings)
-        self.config_button.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
+        ttk.Label(sidebar, text="echoType Studio", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(sidebar, text="Neumorphic controls tuned for focus", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 12))
 
-        self.distortion_label = tk.Label(self.sidebar, text='Distortion:', font=("Calibri", 12))
-        self.distortion_label.grid(row=2, column=0, padx=10, pady=10, sticky="w")
+        account_frame = tk.Frame(sidebar, bg=self.colors["bg"])
+        account_frame.grid(row=2, column=0, sticky="ew")
+        account_frame.columnconfigure(0, weight=1)
+        account_frame.columnconfigure(1, weight=1)
 
-        self.distortion_status = tk.StringVar()
+        ttk.Label(account_frame, text="Username", style="Muted.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self.username_value = tk.StringVar()
+        self.username_entry = ttk.Entry(account_frame, textvariable=self.username_value, style="Neumo.TEntry")
+        self.username_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        ttk.Label(account_frame, text="Password", style="Muted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w")
+        self.password_value = tk.StringVar()
+        self.password_entry = ttk.Entry(account_frame, textvariable=self.password_value, style="Neumo.TEntry", show="*")
+        self.password_entry.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        self.sign_in_button = ttk.Button(account_frame, text="Sign In", style="NeumoAccent.TButton", command=self.sign_in)
+        self.sign_in_button.grid(row=4, column=0, sticky="ew", pady=(2, 6), padx=(0, 6))
+        self.register_button = ttk.Button(account_frame, text="Register New Account", style="Neumo.TButton", command=lambda: self.open_register_dialog())
+        self.register_button.grid(row=4, column=1, sticky="ew", pady=(2, 6))
+
+        self._section_label(sidebar, "Audio Controls").grid(row=3, column=0, sticky="w", pady=(12, 4))
+        distortion_row = tk.Frame(sidebar, bg=self.colors["bg"])
+        distortion_row.grid(row=4, column=0, sticky="ew", pady=(0, 8))
+        self.distortion_status = tk.StringVar(value="off_distortion")
         self.distortion_on = ttk.Radiobutton(
-            self.sidebar,
-            text="On",
+            distortion_row,
+            text="Distortion On",
             variable=self.distortion_status,
             value="on_distortion",
-            command=self.update_distortion_setting
+            command=self.update_distortion_setting,
+            style="Neumo.TRadiobutton"
         )
-        self.distortion_on.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
+        self.distortion_on.pack(side="left", padx=(0, 8))
         self.distortion_off = ttk.Radiobutton(
-            self.sidebar,
-            text="Off",
+            distortion_row,
+            text="Distortion Off",
             variable=self.distortion_status,
             value="off_distortion",
-            command=self.update_distortion_setting
+            command=self.update_distortion_setting,
+            style="Neumo.TRadiobutton"
         )
+        self.distortion_off.pack(side="left")
 
-        self.sign_in_button = ttk.Button(self.sidebar, text="Sign In", command=self.sign_in)
-        self.sign_in_button.grid(row=12, column=0, padx=10, pady=(15, 5), sticky="ew")
-        
-        self.register_button = tk.Button(self.sidebar, text="Register New Account", command=lambda: self.open_register_dialog())
-        self.register_button.grid(row=13, column=0, padx=10, pady=5, sticky="ew") 
-
-        self.load_file_button = tk.Button(self.sidebar, text="Load File for TTS", command=self.load_file_for_tts)
-        self.load_file_button.grid(row=15, column=0, padx=10, pady=10, sticky="ew")
-
-        self.distortion_off.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
-        self.distortion_status.set("off_distortion")
-
-        self.language_label = tk.Label(self.sidebar, text="Language:", font=("Calibri", 12))
-        self.language_label.grid(row=6, column=0, padx=10, pady=(10, 0), sticky="w")
-
-        self.language_frame = tk.Frame(self.sidebar)
-        self.language_frame.grid(row=7, column=0, padx=10, pady=5, sticky="w")
+        self._section_label(sidebar, "Voice Language").grid(row=5, column=0, sticky="w", pady=(2, 2))
+        self.language_frame = tk.Frame(sidebar, bg=self.colors["bg"])
+        self.language_frame.grid(row=6, column=0, sticky="w", pady=(0, 10))
 
         self.language_en = ttk.Radiobutton(
             self.language_frame,
             text="English",
             variable=self.language_var,
             value="English",
-            command=self.change_language
+            command=self.change_language,
+            style="Neumo.TRadiobutton"
         )
         self.language_en.pack(side="left", padx=(0, 10))
 
@@ -402,60 +610,96 @@ class AudioTypingTest:
             text="Spanish",
             variable=self.language_var,
             value="Spanish",
-            command=self.change_language
+            command=self.change_language,
+            style="Neumo.TRadiobutton"
         )
         self.language_es.pack(side="left")
 
-        
+        self._section_label(sidebar, "TTS Speed").grid(row=7, column=0, sticky="w", pady=(4, 2))
+        self.speed_var = tk.DoubleVar(value=1.0)
+        self.speed_slider = tk.Scale(
+            sidebar,
+            from_=0.5,
+            to=2.0,
+            resolution=0.1,
+            orient="horizontal",
+            variable=self.speed_var,
+            length=220,
+            command=self.on_speed_dirty,
+            bg=self.colors["bg"],
+            fg=self.colors["text"],
+            troughcolor=self.colors["sunken"],
+            highlightthickness=0,
+            sliderrelief="raised",
+            bd=0,
+            activebackground=self.colors["shadow_light"],
+        )
+        self.speed_slider.grid(row=8, column=0, sticky="ew", pady=(0, 6))
+        self.apply_speed_button = ttk.Button(sidebar, text="Apply Speed (1.0x)", style="NeumoAccent.TButton", command=self.apply_speed_change, state="disabled")
+        self.apply_speed_button.grid(row=9, column=0, sticky="ew")
 
-        self.username_label = tk.Label(self.sidebar, text="Username:")
-        self.username_label.grid(row=8, column=0, padx=10, pady=10, sticky="esw")
-        self.username_value = tk.StringVar()
-        self.username_entry = tk.Entry(self.sidebar, textvariable=self.username_value)
-        self.username_entry.grid(row=9, column=0, padx=10, pady=5, sticky="esw")
+        self.highlight_var = tk.StringVar(value="off_highlight")
+        self._section_label(sidebar, "Show Spelling Errors").grid(row=10, column=0, sticky="w", pady=(14, 2))
+        highlight_row = tk.Frame(sidebar, bg=self.colors["bg"])
+        highlight_row.grid(row=11, column=0, sticky="w", pady=(0, 4))
+        self.highlight_on = ttk.Radiobutton(highlight_row, text="Yes", variable=self.highlight_var, value="on_highlight", command=self.on_highlight_changed, style="Neumo.TRadiobutton")
+        self.highlight_on.pack(side="left", padx=(0, 12))
+        self.highlight_off = ttk.Radiobutton(highlight_row, text="No", variable=self.highlight_var, value="off_highlight", command=self.on_highlight_changed, style="Neumo.TRadiobutton")
+        self.highlight_off.pack(side="left")
 
-        self.password_label = tk.Label(self.sidebar, text="Password:")
-        self.password_label.grid(row=10, column=0, padx=10, pady=10, sticky="esw")
-        self.password_value = tk.StringVar()
-        self.password_entry = tk.Entry(self.sidebar, textvariable=self.password_value, show="*")
-        self.password_entry.grid(row=11, column=0, padx=10, pady=5, sticky="esw")
+        self.view_scores_button = ttk.Button(sidebar, text="View Scores", style="Neumo.TButton", command=self.open_scores_view)
+        self.view_scores_button.grid(row=12, column=0, sticky="ew", pady=(14, 4))
 
-        self.submit_button = tk.Button(self.root, text="Submit", command=self.submit_text)
-        self.submit_button.grid(row=2, column=2, padx=10, pady=10, sticky="w")
+        self.config_button = ttk.Button(sidebar, text="Configuration Settings", style="Neumo.TButton", command=self.open_config_settings)
+        self.config_button.grid(row=13, column=0, sticky="ew")
 
-        self.discard_button = tk.Button(self.root, text="Discard", command=self.discard_text)
-        self.discard_button.grid(row=2, column=2, padx=10, pady=10, sticky="e")
+        # Main content
+        header = tk.Frame(main_content, bg=self.colors["bg"])
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="echoType", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Soft, tactile audio typing flow", style="Muted.TLabel").grid(row=1, column=0, sticky="w")
 
-        self.play_pause_button = tk.Button(self.root, text="▶", font=("Arial", 14), command=self.toggle_play_pause)
-        self.play_pause_button.grid(row=0, column=2, padx=(10, 5), pady=10, sticky="w")
+        chip_row = tk.Frame(header, bg=self.colors["bg"])
+        chip_row.grid(row=0, column=1, rowspan=2, sticky="e")
+        self.language_chip = ttk.Label(chip_row, text=f"Language: {self.language_var.get()}", style="Tag.TLabel")
+        self.language_chip.pack(side="left", padx=(0, 6))
 
-        self.reset_button = tk.Button(self.root, text="⟲", font=("Arial", 14), command=self.reset_audio)
-        self.reset_button.grid(row=0, column=2, padx=(5, 10), pady=10, sticky="e")
+        control_row = tk.Frame(main_content, bg=self.colors["bg"])
+        control_row.grid(row=1, column=0, sticky="ew", pady=(10, 6))
+        control_row.columnconfigure(3, weight=1)
 
-        self.speed_label = tk.Label(self.sidebar, text='TTS Speed:', font=("Calibri", 12))
-        self.speed_label.grid(row=16, column=0, padx=10, pady=(20, 0), sticky="w")
+        self.load_file_button = ttk.Button(control_row, text="Load Text for TTS", style="NeumoAccent.TButton", command=self.load_file_for_tts)
+        self.load_file_button.grid(row=0, column=0, padx=(0, 8))
 
-        self.speed_var = tk.DoubleVar(value=1.0)  # Default speed = 1.0
-        self.speed_slider = tk.Scale(self.sidebar, from_=0.5, to=2.0, resolution=0.1,
-                                    orient="horizontal", variable=self.speed_var,
-                                    length=200, command=self.on_speed_dirty)
-        self.speed_slider.grid(row=17, column=0, padx=10, pady=5, sticky="ew")
-        self.apply_speed_button = tk.Button(self.sidebar, text="Apply Speed (1.0x)", command=self.apply_speed_change, state="disabled")
-        self.apply_speed_button.grid(row=18, column=0, padx=10, pady=(5, 15), sticky="ew")
+        self.play_pause_button = ttk.Button(control_row, text="⏵", style="Icon.TButton", width=3, command=self.toggle_play_pause)
+        self.play_pause_button.grid(row=0, column=1, padx=4, sticky="w")
 
-        self.highlight_label = tk.Label(self.sidebar, text="Show Spelling Errors:", font=("Calibri", 12))
-        self.highlight_label.grid(row=19, column=0, padx=10, pady=(20, 0), sticky="w")
+        self.reset_button = ttk.Button(control_row, text="⟳", style="Icon.TButton", width=3, command=self.reset_audio)
+        self.reset_button.grid(row=0, column=2, padx=4, sticky="w")
 
-        self.highlight_var = tk.StringVar(value="off_highlight")  # Default = OFF
+        self.user_chip = ttk.Label(control_row, text="Not signed in", style="Tag.TLabel")
+        self.user_chip.grid(row=0, column=3, sticky="e")
 
-        self.highlight_on = ttk.Radiobutton(self.sidebar, text="Yes", variable=self.highlight_var, value="on_highlight", command=self.on_highlight_changed)
-        self.highlight_on.grid(row=20, column=0, padx=10, sticky="w")
+        self.progress_area = tk.Frame(main_content, bg=self.colors["bg"])
+        self.progress_area.grid(row=2, column=0, sticky="ew", pady=(4, 10))
+        self.progress_area.columnconfigure(0, weight=1)
 
-        self.highlight_off = ttk.Radiobutton(self.sidebar, text="No", variable=self.highlight_var, value="off_highlight", command=self.on_highlight_changed)
-        self.highlight_off.grid(row=21, column=0, padx=10, sticky="w")
+        editor_shell = tk.Frame(main_content, bg=self.colors["bg"])
+        editor_shell.grid(row=3, column=0, sticky="nsew")
+        editor_shell.columnconfigure(0, weight=1)
+        editor_shell.rowconfigure(0, weight=1)
 
-        self.view_scores_button = tk.Button(self.sidebar, text="View Scores", command=self.open_scores_view)
-        self.view_scores_button.grid(row=22, column=0, padx=10, pady=(20, 15), sticky="ew")
+        self.editor_container = tk.Frame(editor_shell, bg=self.colors["bg"])
+        self.editor_container.grid(row=0, column=0, sticky="nsew")
+
+        actions = tk.Frame(main_content, bg=self.colors["bg"])
+        actions.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+        self.submit_button = ttk.Button(actions, text="Submit", style="NeumoAccent.TButton", command=self.submit_text)
+        self.submit_button.pack(side="right", padx=(10, 0))
+        self.discard_button = ttk.Button(actions, text="Discard", style="NeumoDanger.TButton", command=self.discard_text)
+        self.discard_button.pack(side="right")
+
         self.update_admin_controls()
         self.update_apply_speed_button()
 
@@ -599,19 +843,24 @@ class AudioTypingTest:
         dialog.resizable(True, True)
         dialog.grab_set()
         dialog.transient(self.root)
+        dialog.configure(bg=self.colors["bg"])
         self.bring_window_to_front(dialog)
 
         user_db = self.load_user_db() or {}
         usernames = sorted(user_db.keys())
 
+        body_card, body = self._build_card(dialog, padding=14)
+        body_card.pack(fill="both", expand=True, padx=16, pady=16)
+        body.columnconfigure(0, weight=1)
+
         # Application data directory section
-        data_frame = tk.LabelFrame(dialog, text="Application Data Directory")
-        data_frame.pack(fill="x", padx=10, pady=10)
+        data_frame = tk.LabelFrame(body, text="Application Data Directory", bg=self.colors["bg"], fg=self.colors["text"])
+        data_frame.pack(fill="x", padx=4, pady=6)
 
         dir_var = tk.StringVar(value=str(self.app_data_dir))
 
-        tk.Label(data_frame, text="Path:").grid(row=0, column=0, padx=10, pady=5, sticky="e")
-        dir_entry = tk.Entry(data_frame, textvariable=dir_var, width=50)
+        ttk.Label(data_frame, text="Path:", style="Muted.TLabel").grid(row=0, column=0, padx=10, pady=5, sticky="e")
+        dir_entry = ttk.Entry(data_frame, textvariable=dir_var, width=50, style="Neumo.TEntry")
         dir_entry.grid(row=0, column=1, padx=10, pady=5, sticky="we")
         data_frame.columnconfigure(1, weight=1)
 
@@ -620,7 +869,7 @@ class AudioTypingTest:
             if selected:
                 dir_var.set(selected)
 
-        browse_btn = tk.Button(data_frame, text="Browse...", command=browse_dir)
+        browse_btn = ttk.Button(data_frame, text="Browse...", style="Neumo.TButton", command=browse_dir)
         browse_btn.grid(row=0, column=2, padx=10, pady=5)
 
         def save_dir():
@@ -632,14 +881,14 @@ class AudioTypingTest:
             dir_var.set(str(self.app_data_dir))
             messagebox.showinfo("Data Directory Updated", f"Application data directory set to:\n{self.app_data_dir}")
 
-        tk.Button(data_frame, text="Save Directory", command=save_dir).grid(row=1, column=1, padx=10, pady=(0, 10), sticky="e")
+        ttk.Button(data_frame, text="Save Directory", style="NeumoAccent.TButton", command=save_dir).grid(row=1, column=1, padx=10, pady=(0, 10), sticky="e")
 
         # Admin management section
-        admin_frame = tk.LabelFrame(dialog, text="Admin Management")
-        admin_frame.pack(fill="x", padx=10, pady=10)
+        admin_frame = tk.LabelFrame(body, text="Admin Management", bg=self.colors["bg"], fg=self.colors["text"])
+        admin_frame.pack(fill="x", padx=4, pady=6)
 
         admin_user_var = tk.StringVar()
-        admin_user_menu = ttk.Combobox(admin_frame, textvariable=admin_user_var, values=usernames, state="readonly")
+        admin_user_menu = ttk.Combobox(admin_frame, textvariable=admin_user_var, values=usernames, state="readonly", style="Neumo.TCombobox")
         admin_user_menu.grid(row=0, column=0, padx=10, pady=5, sticky="we")
         admin_frame.columnconfigure(0, weight=1)
 
@@ -659,14 +908,14 @@ class AudioTypingTest:
                 db[target] = {"password_hash": rec, "is_admin": True}
             self.save_user_db(db)
             messagebox.showinfo("Admin Granted", f"{target} is now an admin.")
-        tk.Button(admin_frame, text="Grant Admin", command=grant_admin).grid(row=0, column=1, padx=10, pady=5, sticky="e")
+        ttk.Button(admin_frame, text="Grant Admin", style="Neumo.TButton", command=grant_admin).grid(row=0, column=1, padx=10, pady=5, sticky="e")
 
         # Reset password section
-        reset_frame = tk.LabelFrame(dialog, text="Reset User Password (requires current user password)")
-        reset_frame.pack(fill="x", padx=10, pady=10)
+        reset_frame = tk.LabelFrame(body, text="Reset User Password (requires current user password)", bg=self.colors["bg"], fg=self.colors["text"])
+        reset_frame.pack(fill="x", padx=4, pady=6)
 
         reset_user_var = tk.StringVar()
-        reset_user_menu = ttk.Combobox(reset_frame, textvariable=reset_user_var, values=usernames, state="readonly")
+        reset_user_menu = ttk.Combobox(reset_frame, textvariable=reset_user_var, values=usernames, state="readonly", style="Neumo.TCombobox")
         reset_user_menu.grid(row=0, column=0, padx=10, pady=5, sticky="we")
         reset_frame.columnconfigure(0, weight=1)
 
@@ -674,12 +923,12 @@ class AudioTypingTest:
         confirm_pwd_var = tk.StringVar()
         admin_pwd_var = tk.StringVar()
 
-        tk.Label(reset_frame, text="New Password:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
-        tk.Entry(reset_frame, textvariable=new_pwd_var, show="*").grid(row=1, column=1, padx=10, pady=5, sticky="we")
-        tk.Label(reset_frame, text="Confirm Password:").grid(row=2, column=0, padx=10, pady=5, sticky="w")
-        tk.Entry(reset_frame, textvariable=confirm_pwd_var, show="*").grid(row=2, column=1, padx=10, pady=5, sticky="we")
-        tk.Label(reset_frame, text="Current Admin Password:").grid(row=3, column=0, padx=10, pady=5, sticky="w")
-        tk.Entry(reset_frame, textvariable=admin_pwd_var, show="*").grid(row=3, column=1, padx=10, pady=5, sticky="we")
+        ttk.Label(reset_frame, text="New Password:", style="Muted.TLabel").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        ttk.Entry(reset_frame, textvariable=new_pwd_var, show="*", style="Neumo.TEntry").grid(row=1, column=1, padx=10, pady=5, sticky="we")
+        ttk.Label(reset_frame, text="Confirm Password:", style="Muted.TLabel").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+        ttk.Entry(reset_frame, textvariable=confirm_pwd_var, show="*", style="Neumo.TEntry").grid(row=2, column=1, padx=10, pady=5, sticky="we")
+        ttk.Label(reset_frame, text="Current Admin Password:", style="Muted.TLabel").grid(row=3, column=0, padx=10, pady=5, sticky="w")
+        ttk.Entry(reset_frame, textvariable=admin_pwd_var, show="*", style="Neumo.TEntry").grid(row=3, column=1, padx=10, pady=5, sticky="we")
         reset_frame.columnconfigure(1, weight=1)
 
         def handle_reset_password():
@@ -725,21 +974,31 @@ class AudioTypingTest:
             admin_pwd_var.set("")
             messagebox.showinfo("Password Reset", f"Password reset for {target}.")
 
-        tk.Button(reset_frame, text="Reset Password", command=handle_reset_password).grid(row=4, column=1, padx=10, pady=(5, 10), sticky="e")
+        ttk.Button(reset_frame, text="Reset Password", style="NeumoAccent.TButton", command=handle_reset_password).grid(row=4, column=1, padx=10, pady=(5, 10), sticky="e")
 
         # User deletion section
-        user_frame = tk.LabelFrame(dialog, text="Delete User and Data (requires current user password)")
-        user_frame.pack(fill="both", padx=10, pady=10, expand=True)
+        user_frame = tk.LabelFrame(body, text="Delete User and Data (requires current user password)", bg=self.colors["bg"], fg=self.colors["text"])
+        user_frame.pack(fill="both", padx=4, pady=6, expand=True)
 
-        tk.Label(user_frame, text="Select User:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
-        user_listbox = tk.Listbox(user_frame, height=8, exportselection=False)
+        ttk.Label(user_frame, text="Select User:", style="Muted.TLabel").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        user_listbox = tk.Listbox(
+            user_frame,
+            height=8,
+            exportselection=False,
+            bg=self.colors["sunken"],
+            fg=self.colors["text"],
+            bd=0,
+            highlightthickness=0,
+            selectbackground=self.colors["accent"],
+            selectforeground="white"
+        )
         user_listbox.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
         for name in usernames:
             user_listbox.insert("end", name)
 
         pwd_var = tk.StringVar()
-        tk.Label(user_frame, text="Current User Password:").grid(row=0, column=1, padx=10, pady=5, sticky="w")
-        tk.Entry(user_frame, textvariable=pwd_var, show="*").grid(row=1, column=1, padx=10, pady=5, sticky="we")
+        ttk.Label(user_frame, text="Current User Password:", style="Muted.TLabel").grid(row=0, column=1, padx=10, pady=5, sticky="w")
+        ttk.Entry(user_frame, textvariable=pwd_var, show="*", style="Neumo.TEntry").grid(row=1, column=1, padx=10, pady=5, sticky="we")
         user_frame.columnconfigure(0, weight=1)
         user_frame.columnconfigure(1, weight=1)
 
@@ -782,19 +1041,19 @@ class AudioTypingTest:
                 if idx is not None:
                     show_deleted_state(idx)
 
-        tk.Button(user_frame, text="Delete User", command=handle_delete_user).grid(row=2, column=0, columnspan=2, padx=10, pady=(5, 10))
+        ttk.Button(user_frame, text="Delete User", style="NeumoDanger.TButton", command=handle_delete_user).grid(row=2, column=0, columnspan=2, padx=10, pady=(5, 10))
 
         # Delete all data section
-        all_frame = tk.LabelFrame(dialog, text="Delete All Application Data (requires current user password)")
-        all_frame.pack(fill="x", padx=10, pady=10)
+        all_frame = tk.LabelFrame(body, text="Delete All Application Data (requires current user password)", bg=self.colors["bg"], fg=self.colors["text"])
+        all_frame.pack(fill="x", padx=4, pady=6)
 
         confirm_pwd = tk.StringVar()
 
-        tk.Label(all_frame, text="Current User:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
-        current_user_label = tk.Label(all_frame, text=self.current_username or "Not signed in")
+        ttk.Label(all_frame, text="Current User:", style="Muted.TLabel").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        current_user_label = ttk.Label(all_frame, text=self.current_username or "Not signed in", style="Muted.TLabel")
         current_user_label.grid(row=0, column=1, padx=10, pady=5, sticky="w")
-        tk.Label(all_frame, text="Password:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
-        tk.Entry(all_frame, textvariable=confirm_pwd, show="*").grid(row=1, column=1, padx=10, pady=5, sticky="we")
+        ttk.Label(all_frame, text="Password:", style="Muted.TLabel").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        ttk.Entry(all_frame, textvariable=confirm_pwd, show="*", style="Neumo.TEntry").grid(row=1, column=1, padx=10, pady=5, sticky="we")
         all_frame.columnconfigure(1, weight=1)
 
         def handle_delete_all():
@@ -810,7 +1069,7 @@ class AudioTypingTest:
                 refresh_user_list()
                 current_user_label.config(text=self.current_username or "Not signed in")
 
-        tk.Button(all_frame, text="Delete All Data", command=handle_delete_all).grid(row=2, column=0, columnspan=2, padx=10, pady=(5, 10))
+        ttk.Button(all_frame, text="Delete All Data", style="NeumoDanger.TButton", command=handle_delete_all).grid(row=2, column=0, columnspan=2, padx=10, pady=(5, 10))
         self.fit_window_to_content(dialog, min_size=(720, 650))
 
     def open_scores_view(self):
@@ -822,28 +1081,32 @@ class AudioTypingTest:
         dialog.resizable(True, True)
         dialog.grab_set()
         dialog.transient(self.root)
+        dialog.configure(bg=self.colors["bg"])
         self.bring_window_to_front(dialog)
 
         data = self.load_scores_store() or {}
         user_db = self.load_user_db() or {}
         users = sorted(data.keys())
 
-        top_frame = tk.Frame(dialog)
-        top_frame.pack(fill="x", padx=10, pady=10)
+        body_card, body = self._build_card(dialog, padding=14)
+        body_card.pack(fill="both", expand=True, padx=16, pady=16)
 
-        tk.Label(top_frame, text="Users:").pack(side="left")
+        top_frame = tk.Frame(body, bg=self.colors["bg"])
+        top_frame.pack(fill="x", padx=4, pady=6)
+
+        ttk.Label(top_frame, text="Users:", style="Muted.TLabel").pack(side="left")
         user_var = tk.StringVar(value=users[0] if users else "")
-        user_menu = ttk.Combobox(top_frame, textvariable=user_var, values=users, state="readonly")
+        user_menu = ttk.Combobox(top_frame, textvariable=user_var, values=users, state="readonly", style="Neumo.TCombobox")
         user_menu.pack(side="left", padx=10)
 
-        user_label = tk.Label(top_frame, text=f"User: {user_var.get() or 'None'}")
+        user_label = ttk.Label(top_frame, text=f"User: {user_var.get() or 'None'}", style="Muted.TLabel")
         user_label.pack(side="left", padx=10)
 
-        name_label = tk.Label(top_frame, text="Name: ")
+        name_label = ttk.Label(top_frame, text="Name: ", style="Muted.TLabel")
         name_label.pack(side="left", padx=10)
 
-        table_frame = tk.Frame(dialog)
-        table_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        table_frame = tk.Frame(body, bg=self.colors["bg"])
+        table_frame.pack(fill="both", expand=True, padx=4, pady=6)
 
         columns = ("test_no", "time", "wpm", "accuracy", "details")
         tree = ttk.Treeview(table_frame, columns=columns, show="headings")
@@ -922,8 +1185,8 @@ class AudioTypingTest:
             except Exception as exc:
                 messagebox.showerror("Download Error", f"Could not save scores:\n{exc}")
 
-        download_btn = tk.Button(dialog, text="Download Selected User Scores", command=download_csv)
-        download_btn.pack(pady=(0, 10))
+        download_btn = ttk.Button(body, text="Download Selected User Scores", style="NeumoAccent.TButton", command=download_csv)
+        download_btn.pack(pady=(6, 0))
         self.fit_window_to_content(dialog, min_size=(820, 520))
 
     def open_register_dialog(self, suggested_username=None):
@@ -932,7 +1195,11 @@ class AudioTypingTest:
         dialog.resizable(True, True)
         dialog.grab_set()
         dialog.transient(self.root)
+        dialog.configure(bg=self.colors["bg"])
         self.bring_window_to_front(dialog)
+
+        body_card, body = self._build_card(dialog, padding=14)
+        body_card.pack(fill="both", expand=True, padx=16, pady=16)
 
         first_name_var = tk.StringVar()
         last_name_var = tk.StringVar()
@@ -943,12 +1210,12 @@ class AudioTypingTest:
         labels = ["First Name", "Last Name", "Username", "Password", "Confirm Password"]
         vars = [first_name_var, last_name_var, username_var, password_var, confirm_var]
         for idx, (label_text, var) in enumerate(zip(labels, vars)):
-            tk.Label(dialog, text=label_text + ":").grid(row=idx, column=0, padx=10, pady=5, sticky="e")
+            ttk.Label(body, text=label_text + ":", style="Muted.TLabel").grid(row=idx, column=0, padx=10, pady=5, sticky="e")
             show = "*" if "Password" in label_text else None
-            entry = tk.Entry(dialog, textvariable=var, show=show)
+            entry = ttk.Entry(body, textvariable=var, show=show, style="Neumo.TEntry")
             entry.grid(row=idx, column=1, padx=10, pady=5, sticky="we")
 
-        dialog.columnconfigure(1, weight=1)
+        body.columnconfigure(1, weight=1)
 
         def submit():
             if self.register_account(
@@ -963,11 +1230,11 @@ class AudioTypingTest:
         def cancel():
             dialog.destroy()
 
-        button_frame = tk.Frame(dialog)
+        button_frame = tk.Frame(body, bg=self.colors["bg"])
         button_frame.grid(row=len(labels), column=0, columnspan=2, pady=15)
 
-        tk.Button(button_frame, text="Cancel", command=cancel).pack(side="right", padx=5)
-        tk.Button(button_frame, text="Register", command=submit).pack(side="right", padx=5)
+        ttk.Button(button_frame, text="Cancel", style="Neumo.TButton", command=cancel).pack(side="right", padx=5)
+        ttk.Button(button_frame, text="Register", style="NeumoAccent.TButton", command=submit).pack(side="right", padx=5)
 
         self.fit_window_to_content(dialog, min_size=(400, 300))
         dialog.wait_window()
@@ -1012,7 +1279,7 @@ class AudioTypingTest:
             self.sign_in_button.config(
                 text=f"Sign Out ({username})",
                 state="normal",
-                style="success.TButton",
+                style="NeumoDanger.TButton",
                 command=self.sign_out
             )
             self.username_entry.config(state="disabled")
@@ -1020,17 +1287,19 @@ class AudioTypingTest:
             # Clear password field after successful login
             self.password_value.set("") 
             self.username_value.set(username)
+            self.user_chip.config(text=f"Signed in as {username}")
         else:
             self.sign_in_button.config(
                 text="Sign In",
                 state="normal",
-                style="TButton",
+                style="NeumoAccent.TButton",
                 command=self.sign_in
             )
             self.username_entry.config(state="normal")
             self.password_entry.config(state="normal")
             self.password_value.set("")
             self.username_value.set("")
+            self.user_chip.config(text="Not signed in")
 
         self.current_username = username
         self.current_first_name = first_name if username else None
@@ -1157,16 +1426,19 @@ class AudioTypingTest:
             self._invalid_password_after_id = None
 
         if self._password_fg is None:
-            self._password_fg = self.password_entry.cget("fg")
+            try:
+                self._password_fg = self.password_entry.cget("foreground")
+            except Exception:
+                self._password_fg = self.colors["text"]
         if self._password_show is None:
             self._password_show = self.password_entry.cget("show")
 
-        self.password_entry.config(fg="red", show="")
+        self.password_entry.config(foreground="red", show="")
         self.password_value.set("Invalid Password!")
 
         def reset_password_field():
             self.password_value.set("")
-            self.password_entry.config(fg=self._password_fg, show=self._password_show)
+            self.password_entry.config(foreground=self._password_fg, show=self._password_show)
             self._invalid_password_after_id = None
 
         self._invalid_password_after_id = self.root.after(3000, reset_password_field)
@@ -1339,6 +1611,7 @@ class AudioTypingTest:
                 self.progress_bar_manager.reset_progress_bar()
                 self.update_play_pause_button(False)
                 self.text_manager.hide_results()
+                self._refresh_language_chip()
             except FileNotFoundError as exc:
                 messagebox.showerror("Voice Not Found", str(exc))
                 revert_selection()
@@ -1399,6 +1672,7 @@ class AudioTypingTest:
         except Exception as exc:
             messagebox.showerror("Voice Error", f"Could not switch voice:\n{exc}")
             revert_selection()
+        self._refresh_language_chip()
 
     def try_show_file_loaded_message(self):
         # Deprecated shim; route to unified message handler
@@ -1441,19 +1715,34 @@ class AudioTypingTest:
         dialog.title("Select Important Details")
         dialog.grab_set()
         dialog.transient(self.root)
+        dialog.configure(bg=self.colors["bg"])
         self.bring_window_to_front(dialog)
 
-        instructions = tk.Label(
-            dialog,
+        body_card, body = self._build_card(dialog, padding=14)
+        body_card.pack(fill="both", expand=True, padx=16, pady=16)
+
+        instructions = ttk.Label(
+            body,
             text="Highlight text below and click 'Add Detail' to track it during grading.",
-            font=("Arial", 12)
+            style="Muted.TLabel"
         )
-        instructions.pack(pady=(10, 5))
+        instructions.pack(pady=(4, 8))
 
-        text_frame = tk.Frame(dialog)
-        text_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        text_frame = tk.Frame(body, bg=self.colors["bg"])
+        text_frame.pack(fill="both", expand=True, padx=4, pady=4)
 
-        text_widget = tk.Text(text_frame, wrap="word", height=15)
+        text_widget = tk.Text(
+            text_frame,
+            wrap="word",
+            height=15,
+            bg=self.colors["sunken"],
+            fg=self.colors["text"],
+            relief="flat",
+            bd=0,
+            insertbackground=self.colors["accent"],
+            highlightthickness=1,
+            highlightbackground=self.colors["shadow_light"]
+        )
         text_widget.insert("1.0", text_content)
         text_widget.pack(side="left", fill="both", expand=True)
         text_widget.bind("<Key>", lambda event: "break")
@@ -1462,17 +1751,26 @@ class AudioTypingTest:
         text_scroll.pack(side="right", fill="y")
         text_widget.config(yscrollcommand=text_scroll.set)
 
-        list_label = tk.Label(dialog, text="Selected Details:", font=("Arial", 11))
+        list_label = ttk.Label(body, text="Selected Details:", style="Muted.TLabel")
         list_label.pack(pady=(10, 0))
 
-        listbox = tk.Listbox(dialog, height=6)
-        listbox.pack(fill="x", padx=10)
+        listbox = tk.Listbox(
+            body,
+            height=6,
+            bg=self.colors["sunken"],
+            fg=self.colors["text"],
+            bd=0,
+            highlightthickness=0,
+            selectbackground=self.colors["accent"],
+            selectforeground="white"
+        )
+        listbox.pack(fill="x", padx=4)
 
         details = [detail for detail in initial_details if detail.strip()]
         for detail in details:
             listbox.insert("end", detail)
 
-        button_frame = tk.Frame(dialog)
+        button_frame = tk.Frame(body, bg=self.colors["bg"])
         button_frame.pack(fill="x", pady=10)
 
         def add_detail():
@@ -1508,22 +1806,22 @@ class AudioTypingTest:
             result["value"] = None
             dialog.destroy()
 
-        add_button = tk.Button(button_frame, text="Add Detail", command=add_detail)
+        add_button = ttk.Button(button_frame, text="Add Detail", style="NeumoAccent.TButton", command=add_detail)
         add_button.pack(side="left", padx=5)
 
-        remove_button = tk.Button(button_frame, text="Remove Detail", command=remove_detail)
+        remove_button = ttk.Button(button_frame, text="Remove Detail", style="Neumo.TButton", command=remove_detail)
         remove_button.pack(side="left", padx=5)
 
-        clear_button = tk.Button(button_frame, text="Clear All", command=clear_all_details)
+        clear_button = ttk.Button(button_frame, text="Clear All", style="Neumo.TButton", command=clear_all_details)
         clear_button.pack(side="left", padx=5)
 
         spacer = tk.Frame(button_frame)
         spacer.pack(side="left", expand=True)
 
-        save_button = tk.Button(button_frame, text="Save Details", command=confirm)
+        save_button = ttk.Button(button_frame, text="Save Details", style="NeumoAccent.TButton", command=confirm)
         save_button.pack(side="right", padx=5)
 
-        cancel_button = tk.Button(button_frame, text="Cancel", command=cancel)
+        cancel_button = ttk.Button(button_frame, text="Cancel", style="Neumo.TButton", command=cancel)
         cancel_button.pack(side="right", padx=5)
 
         dialog.protocol("WM_DELETE_WINDOW", cancel)
@@ -1764,13 +2062,17 @@ class AudioTypingTest:
         self.loading_window.resizable(False, False)
         self.loading_window.grab_set()
         self.loading_window.transient(self.root)
+        self.loading_window.configure(bg=self.colors["bg"])
         self.bring_window_to_front(self.loading_window)
 
-        label = tk.Label(self.loading_window, text=message, font=("Arial", 12))
-        label.pack(pady=10)
+        body_card, body = self._build_card(self.loading_window, padding=14)
+        body_card.pack(fill="both", expand=True, padx=16, pady=16)
 
-        progress = ttk.Progressbar(self.loading_window, mode='indeterminate', length=200)
-        progress.pack(pady=10)
+        label = ttk.Label(body, text=message, style="Muted.TLabel")
+        label.pack(pady=8)
+
+        progress = ttk.Progressbar(body, mode='indeterminate', length=240, style="Neumo.Horizontal.TProgressbar")
+        progress.pack(pady=8)
         progress.start()
         
         self.fit_window_to_content(self.loading_window, min_size=(320, 140))
@@ -1911,7 +2213,7 @@ class AudioTypingTest:
     
     def start_timer_display(self):
         if self.timer_id is None:
-            self.text_manager.timer_label.grid()
+            self.text_manager.show_timer()
             self.update_timer_display()
 
     def update_timer_display(self):
@@ -1924,7 +2226,7 @@ class AudioTypingTest:
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
             self.timer_id = None
-        self.text_manager.timer_label.grid_remove()
+        self.text_manager.hide_timer()
 
 
     def start_timer_if_needed(self, event=None):

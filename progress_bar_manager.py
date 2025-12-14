@@ -1,8 +1,18 @@
 from tkinter import ttk
 
+
 class ProgressBarManager:
-    def __init__(self, root, tts_manager, update_interval_ms: int = 100, use_stream_progress: bool = True):
+    def __init__(
+        self,
+        root,
+        tts_manager,
+        update_interval_ms: int = 100,
+        use_stream_progress: bool = True,
+        bar_container=None,
+        style_name: str = "Horizontal.TProgressbar"
+    ):
         self.root = root
+        self.parent = bar_container or root
         self.tts_manager = tts_manager
         self.update_interval = int(update_interval_ms)
         self.use_stream_progress = bool(use_stream_progress)
@@ -12,8 +22,13 @@ class ProgressBarManager:
         self.is_paused = True
         self.on_complete = None
 
-        self.progress_bar = ttk.Progressbar(root, orient="horizontal", length=800, mode="determinate")
-        self.progress_bar.grid(row=0, column=1, pady=10, sticky="s")
+        try:
+            self.parent.columnconfigure(0, weight=1)
+        except Exception:
+            pass
+
+        self.progress_bar = ttk.Progressbar(self.parent, orient="horizontal", mode="determinate", style=style_name)
+        self.progress_bar.grid(row=0, column=0, pady=6, sticky="ew")
         self.progress_bar["maximum"] = 100
 
         self.audio_duration = 0.0   # seconds

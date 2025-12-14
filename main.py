@@ -14,12 +14,11 @@ ensure_dependencies_installed()
 import atexit
 import signal
 import tkinter as tk
-import ttkbootstrap as ttk
+import tkinter.ttk as ttk
 from audio_typing_test import AudioTypingTest
 
 if __name__ == "__main__":
-    root = ttk.Tk()
-    style = ttk.Style("darkly")
+    root = tk.Tk()
     try:
         root.state("zoomed")
     except tk.TclError:
