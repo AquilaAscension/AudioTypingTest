@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 echoType
+
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import filedialog

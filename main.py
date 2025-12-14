@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 echoType
+
 import sys
 #fix for blurry text
 if sys.platform == "win32":

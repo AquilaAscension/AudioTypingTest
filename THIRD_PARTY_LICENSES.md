@@ -1,3 +1,10 @@
+# Third-party licenses
+
+echoType itself is licensed under GPL-3.0-or-later; see `LICENSE`.
+This file lists third-party dependencies and their licenses.
+
+---
+
 # **cffi**
 Version: 2.0.0
 License: MIT
