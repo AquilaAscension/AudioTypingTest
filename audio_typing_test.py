@@ -116,10 +116,11 @@ class AudioTypingTest:
             except Exception:
                 return {}
         # Auto-create a default config if missing
+        default_dir = getattr(self, "app_data_dir", None) or self.default_app_data_dir()
         default = {
-            "app_data_dir": str(self.app_data_dir),
+            "app_data_dir": str(default_dir),
             "encryption_key": secrets.token_hex(32),
-            "ui_settings": self.get_current_ui_settings()
+            "ui_settings": self.default_ui_settings()
         }
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:
@@ -220,13 +221,24 @@ class AudioTypingTest:
         except Exception:
             return {}
 
-    def get_current_ui_settings(self):
+    def default_ui_settings(self):
         return {
-            "distortion": self.distortion_status.get(),
-            "language": self.language_var.get(),
-            "speed": self.speed_var.get(),
-            "highlight": self.highlight_var.get()
+            "distortion": "off_distortion",
+            "language": "English",
+            "speed": 1.0,
+            "highlight": "off_highlight"
         }
+
+    def get_current_ui_settings(self):
+        try:
+            return {
+                "distortion": self.distortion_status.get(),
+                "language": self.language_var.get(),
+                "speed": self.speed_var.get(),
+                "highlight": self.highlight_var.get()
+            }
+        except Exception:
+            return self.default_ui_settings()
 
     def load_ui_settings(self):
         config = self.load_config()
@@ -234,6 +246,8 @@ class AudioTypingTest:
 
     def save_ui_settings(self):
         if not self.current_is_admin:
+            return
+        if not hasattr(self, "distortion_status") or not hasattr(self, "language_var"):
             return
         config = self.load_config()
         config["app_data_dir"] = str(self.app_data_dir)
