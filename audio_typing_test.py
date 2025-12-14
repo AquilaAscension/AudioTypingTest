@@ -4,6 +4,10 @@ from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import font as tkfont
 import importlib
+try:
+    import darkdetect
+except Exception:
+    darkdetect = None
 import docx
 import PyPDF2
 import time
@@ -17,9 +21,11 @@ import hashlib
 import shutil
 import base64
 import secrets
+import tempfile
+import zipfile
 from pathlib import Path
 
-NEUMORPH_COLORS = {
+LIGHT_NEUMORPH_COLORS = {
     "bg": "#e7ebf3",
     "sunken": "#dfe4ed",
     "shadow_light": "#f7f9ff",
@@ -33,6 +39,23 @@ NEUMORPH_COLORS = {
     "danger": "#e17a7a"
 }
 
+DARK_NEUMORPH_COLORS = {
+    "bg": "#1f2432",
+    "sunken": "#252b3a",
+    "shadow_light": "#2d3446",
+    "shadow_dark": "#151924",
+    "text": "#e5eaf6",
+    "muted": "#8f99b4",
+    "accent": "#7da4ff",
+    "accent_dark": "#5479d1",
+    "accent_soft": "#9bb9ff",
+    "success": "#4dbfa3",
+    "danger": "#e17a7a"
+}
+
+ICON_TARGET_PX = 28
+ICON_SCALE = 2.0
+
 if "ttkbootstrap" in sys.modules:
     sys.modules.pop("ttkbootstrap", None)
 ttk = importlib.import_module("tkinter.ttk")
@@ -44,7 +67,8 @@ NEUMORPH_FONTS = {
     "body": ("Segoe UI", 11),
     "display": ("Segoe UI", 18, "bold"),
     "mono": ("Cascadia Code", 12),
-    "caption": ("Segoe UI", 10)
+    "caption": ("Segoe UI", 10),
+    "icon": ("Segoe UI", 16, "bold")
 }
 
 ROAD_VARIATIONS = {
@@ -74,8 +98,14 @@ class AudioTypingTest:
         self.root = root
         self.root.title("echoType")
 
-        self.colors = NEUMORPH_COLORS
+        self.theme_mode = self.detect_theme_mode()
+        self.colors = DARK_NEUMORPH_COLORS if self.theme_mode == "dark" else LIGHT_NEUMORPH_COLORS
         self.fonts = NEUMORPH_FONTS
+        self.play_symbol = ">"
+        self.pause_symbol = "||"
+        self.icon_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "icons"
+        self.icon_images = {}
+        self.icon_scale = ICON_SCALE
         self._init_neumorphic_theme()
 
         self.runtime_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -98,7 +128,8 @@ class AudioTypingTest:
         self.current_username = None
         self.current_first_name = None
         self.current_last_name = None
-        self.current_is_admin = False
+        # In empty state (no users), allow admin access so settings are reachable
+        self.current_is_admin = self.check_empty_user_db_is_admin()
         self._invalid_password_after_id = None
         self._password_fg = None
         self._password_show = None
@@ -134,6 +165,48 @@ class AudioTypingTest:
         self.road_variant_map = self.build_road_variant_map()
         self.apply_saved_settings()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def detect_theme_mode(self):
+        """Determine dark/light mode using darkdetect when available."""
+        if darkdetect:
+            try:
+                theme = darkdetect.theme()
+                if theme and str(theme).lower().startswith("dark"):
+                    return "dark"
+            except Exception:
+                pass
+        return "light"
+
+    def load_icons(self):
+        """Load theme-aware icons for playback controls if present."""
+        theme = self.theme_mode
+        mappings = {
+            "play": [f"play_{theme}.png", "play.png"],
+            "pause": [f"pause_{theme}.png", "pause.png"],
+            "reset": [f"reset_{theme}.png", "reset.png"],
+        }
+        target_px = max(8, int(ICON_TARGET_PX * max(0.1, self.icon_scale)))
+        for key, candidates in mappings.items():
+            self.icon_images[key] = None
+            for name in candidates:
+                icon_path = self.icon_dir / name
+                if icon_path.is_file():
+                    try:
+                        img = tk.PhotoImage(file=str(icon_path))
+                        w, h = img.width(), img.height()
+                        # Downscale oversized icons relative to target_px
+                        shrink = max(w, h) / float(target_px)
+                        if shrink > 1.0:
+                            factor = max(1, int(shrink + 0.999))
+                            img = img.subsample(factor, factor)
+                        # Upscale if desired scale > 1 and source is smaller
+                        elif self.icon_scale > 1.0:
+                            factor = max(1, int(self.icon_scale + 0.5))
+                            img = img.zoom(factor, factor)
+                        self.icon_images[key] = img
+                        break
+                    except Exception:
+                        continue
 
     def _init_neumorphic_theme(self):
         self.root.configure(bg=self.colors["bg"])
@@ -181,6 +254,7 @@ class AudioTypingTest:
         self.style = style
 
         self.style.configure("Title.TLabel", font=self.fonts["title"], foreground=self.colors["text"], padding=0)
+        self.style.configure("SettingsTitle.TLabel", font=("Segoe UI", 26, "bold"), foreground=self.colors["text"], padding=0)
         self.style.configure("Heading.TLabel", font=self.fonts["heading"], foreground=self.colors["text"], padding=0)
         self.style.configure("Muted.TLabel", font=self.fonts["caption"], foreground=self.colors["muted"], padding=0)
         self.style.configure("Tag.TLabel", font=self.fonts["caption"], foreground=self.colors["text"], padding=(10, 4), background=self.colors["bg"], borderwidth=0, relief="flat")
@@ -196,7 +270,12 @@ class AudioTypingTest:
         self.style.configure("Neumo.TButton", **btn_base, lightcolor=self.colors["shadow_light"], darkcolor=self.colors["shadow_dark"])
         self.style.map(
             "Neumo.TButton",
-            background=[("pressed", self.colors["sunken"]), ("active", self.colors["shadow_light"])],
+            background=[
+                ("disabled", self.colors["sunken"]),
+                ("pressed", self.colors["sunken"]),
+                ("active", self.colors["shadow_light"])
+            ],
+            foreground=[("disabled", self.colors["muted"])],
             relief=[("pressed", "sunken")]
         )
 
@@ -210,7 +289,12 @@ class AudioTypingTest:
         self.style.configure("NeumoAccent.TButton", **accent_base)
         self.style.map(
             "NeumoAccent.TButton",
-            background=[("pressed", self.colors["accent_dark"]), ("active", self.colors["accent_dark"])]
+            background=[
+                ("disabled", self.colors["sunken"]),
+                ("pressed", self.colors["accent_dark"]),
+                ("active", self.colors["accent_dark"])
+            ],
+            foreground=[("disabled", self.colors["muted"])]
         )
 
         danger_base = dict(btn_base)
@@ -218,16 +302,53 @@ class AudioTypingTest:
         self.style.configure("NeumoDanger.TButton", **danger_base)
         self.style.map(
             "NeumoDanger.TButton",
-            background=[("pressed", "#c56262"), ("active", "#c56262")]
+            background=[
+                ("disabled", self.colors["sunken"]),
+                ("pressed", "#c56262"),
+                ("active", "#c56262")
+            ],
+            foreground=[("disabled", self.colors["muted"])]
         )
 
         icon_base = dict(btn_base)
-        icon_base.update(padding=(10, 8), font=self.fonts["heading"])
+        icon_base.update(padding=(14, 10), font=self.fonts["icon"])
         self.style.configure("Icon.TButton", **icon_base)
         self.style.map(
             "Icon.TButton",
-            background=[("pressed", self.colors["sunken"]), ("active", self.colors["shadow_light"])],
+            background=[
+                ("disabled", self.colors["sunken"]),
+                ("pressed", self.colors["sunken"]),
+                ("active", self.colors["shadow_light"])
+            ],
+            foreground=[("disabled", self.colors["muted"])],
             relief=[("pressed", "sunken")]
+        )
+
+        toggle_base = dict(btn_base)
+        toggle_base.update(padding=(12, 8), background=self.colors["sunken"])
+        self.style.configure("Toggle.TButton", **toggle_base)
+        self.style.map(
+            "Toggle.TButton",
+            background=[
+                ("disabled", self.colors["sunken"]),
+                ("pressed", self.colors["shadow_light"]),
+                ("active", self.colors["shadow_light"])
+            ],
+            foreground=[("disabled", self.colors["muted"])],
+            relief=[("pressed", "sunken")]
+        )
+
+        toggle_active = dict(btn_base)
+        toggle_active.update(padding=(12, 8), background=self.colors["accent"], foreground="white")
+        self.style.configure("ToggleActive.TButton", **toggle_active)
+        self.style.map(
+            "ToggleActive.TButton",
+            background=[
+                ("disabled", self.colors["sunken"]),
+                ("pressed", self.colors["accent_dark"]),
+                ("active", self.colors["accent_dark"])
+            ],
+            foreground=[("disabled", self.colors["muted"])]
         )
 
         self.style.configure(
@@ -257,6 +378,23 @@ class AudioTypingTest:
             bordercolor=self.colors["bg"],
             lightcolor=self.colors["shadow_light"],
             darkcolor=self.colors["shadow_dark"]
+        )
+
+        self.style.configure(
+            "Neumo.Treeview",
+            background=self.colors["shadow_light"],
+            fieldbackground=self.colors["shadow_light"],
+            foreground=self.colors["text"],
+            rowheight=32,
+            bordercolor=self.colors["bg"],
+            lightcolor=self.colors["shadow_light"],
+            darkcolor=self.colors["shadow_dark"],
+            padding=6
+        )
+        self.style.configure(
+            "Neumo.Treeview.Heading",
+            font=self.fonts["subtitle"],
+            foreground=self.colors["text"]
         )
 
         self.root.option_add("*TCombobox*Listbox.background", self.colors["sunken"])
@@ -292,6 +430,31 @@ class AudioTypingTest:
     def _refresh_language_chip(self):
         if hasattr(self, "language_chip"):
             self.language_chip.config(text=f"Language: {self.language_var.get()}")
+
+    def _build_toggle_buttons(self, parent, variable, options, command=None):
+        buttons = []
+        for label, value in options:
+            btn = ttk.Button(
+                parent,
+                text=label,
+                style="Toggle.TButton",
+                command=lambda v=value: self._on_toggle(variable, v, buttons, options, command)
+            )
+            btn.pack(side="left", padx=(0, 8))
+            buttons.append((btn, value))
+        self._update_toggle_styles(variable.get(), buttons)
+        return buttons
+
+    def _on_toggle(self, variable, value, buttons, options, command):
+        variable.set(value)
+        self._update_toggle_styles(value, buttons)
+        if callable(command):
+            command()
+
+    def _update_toggle_styles(self, current, buttons):
+        for btn, val in buttons:
+            style = "ToggleActive.TButton" if val == current else "Toggle.TButton"
+            btn.configure(style=style)
 
     # Configuration and path utilities
     def default_app_data_dir(self):
@@ -336,6 +499,39 @@ class AudioTypingTest:
         except Exception as exc:
             messagebox.showerror("Config Error", f"Could not save configuration:\n{exc}")
 
+    def trigger_export(self):
+        if not self.current_is_admin:
+            messagebox.showwarning("Admin Only", "Export is available to admins only.")
+            return
+        dest = filedialog.asksaveasfilename(
+            defaultextension=".echo",
+            filetypes=[("echo archive", "*.echo"), ("All Files", "*.*")],
+            initialfile="echoType_backup.echo"
+        )
+        if not dest:
+            return
+        if self.export_app_data(dest):
+            messagebox.showinfo("Export Complete", f"Data exported to:\n{dest}")
+
+    def trigger_import(self):
+        if not self.current_is_admin:
+            messagebox.showwarning("Admin Only", "Import is available to admins only.")
+            return
+        src = filedialog.askopenfilename(
+            filetypes=[("echo archive", "*.echo"), ("All Files", "*.*")],
+            title="Select .echo backup to import"
+        )
+        if not src:
+            return
+        proceed = messagebox.askyesno(
+            "Confirm Import",
+            "Importing will replace current app data with the archive contents.\nDo you want to continue?"
+        )
+        if not proceed:
+            return
+        if self.import_app_data(src):
+            messagebox.showinfo("Import Complete", "Data imported successfully. Please restart the app to ensure all settings reload.")
+
     def load_app_data_dir(self):
         config = self.load_config()
         configured = config.get("app_data_dir")
@@ -356,6 +552,76 @@ class AudioTypingTest:
     def ensure_app_dirs(self):
         for path in [self.app_data_dir, self.details_dir, self.generations_dir]:
             path.mkdir(parents=True, exist_ok=True)
+
+    def export_app_data(self, dest_path: Path):
+        """Package app data and config into a .echo archive."""
+        dest_path = Path(dest_path)
+        try:
+            tmp_fd, tmp_name = tempfile.mkstemp(suffix=".echo")
+            os.close(tmp_fd)
+            with zipfile.ZipFile(tmp_name, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                # App data
+                for path in self.app_data_dir.rglob("*"):
+                    if path.is_file():
+                        arcname = Path("app_data") / path.relative_to(self.app_data_dir)
+                        zf.write(path, arcname)
+                # Config
+                if self.config_path.exists():
+                    zf.write(self.config_path, Path("config") / self.config_path.name)
+            shutil.move(tmp_name, dest_path)
+            return True
+        except Exception as exc:
+            try:
+                os.remove(tmp_name)
+            except Exception:
+                pass
+            messagebox.showerror("Export Failed", f"Could not export data:\n{exc}")
+            return False
+
+    def import_app_data(self, archive_path: Path):
+        """Import app data/config from a .echo archive."""
+        archive_path = Path(archive_path)
+        temp_dir = Path(tempfile.mkdtemp(prefix="echo_import_"))
+        try:
+            with zipfile.ZipFile(archive_path, "r") as zf:
+                zf.extractall(temp_dir)
+            new_app_dir = temp_dir / "app_data"
+            new_config = temp_dir / "config" / self.config_path.name
+            if not new_app_dir.exists():
+                messagebox.showerror("Import Failed", "The archive is missing app_data content.")
+                return False
+
+            # Replace app data
+            if self.app_data_dir.exists():
+                shutil.rmtree(self.app_data_dir, ignore_errors=False)
+            shutil.copytree(new_app_dir, self.app_data_dir)
+            self.details_dir = self.app_data_dir / "Details"
+            self.generations_dir = self.app_data_dir / "Generations"
+            self.scores_file = self.app_data_dir / "scores.enc"
+            self.tts_temp_file = self.app_data_dir / "TypingTTS.wav"
+            self.ensure_app_dirs()
+
+            # Restore config
+            if new_config.exists():
+                try:
+                    with open(new_config, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    cfg["app_data_dir"] = str(self.app_data_dir)
+                    with open(self.config_path, "w", encoding="utf-8") as f:
+                        json.dump(cfg, f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+
+            # Reset TTS paths
+            self.tts_manager.filename = str(self.tts_temp_file)
+            self.tts_manager.wav_file = str(self.tts_temp_file)
+            self.save_ui_settings()
+            return True
+        except Exception as exc:
+            messagebox.showerror("Import Failed", f"Could not import data:\n{exc}")
+            return False
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     def update_app_data_dir(self, new_dir: Path):
         new_dir = Path(new_dir).expanduser()
@@ -481,18 +747,25 @@ class AudioTypingTest:
         def make_wrapper(func):
             def wrapper(*args, **kwargs):
                 args, kwargs = self._normalize_messagebox_args(*args, **kwargs)
-                kwargs.setdefault("parent", self.root)
+                parent = kwargs.get("parent") or self.root
+                temp_top = None
                 try:
-                    self.root.attributes("-topmost", True)
+                    self.root.lift()
+                    self.root.focus_force()
+                    temp_top = tk.Toplevel(self.root)
+                    temp_top.withdraw()
+                    temp_top.attributes("-topmost", True)
+                    kwargs["parent"] = temp_top
                 except Exception:
-                    pass
+                    kwargs["parent"] = parent
                 try:
                     return func(*args, **kwargs)
                 finally:
-                    try:
-                        self.root.after(200, lambda: self.root.attributes("-topmost", False))
-                    except Exception:
-                        pass
+                    if temp_top:
+                        try:
+                            temp_top.destroy()
+                        except Exception:
+                            pass
             return wrapper
 
         for name in ["showinfo", "showwarning", "showerror", "askyesno", "askyesnocancel", "askquestion"]:
@@ -559,75 +832,39 @@ class AudioTypingTest:
         main_content.rowconfigure(3, weight=1)
         main_content.columnconfigure(0, weight=1)
 
-        ttk.Label(sidebar, text="echoType Studio", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(sidebar, text="Neumorphic controls tuned for focus", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 12))
+        self.load_icons()
 
-        account_frame = tk.Frame(sidebar, bg=self.colors["bg"])
-        account_frame.grid(row=2, column=0, sticky="ew")
-        account_frame.columnconfigure(0, weight=1)
-        account_frame.columnconfigure(1, weight=1)
+        ttk.Label(sidebar, text="Settings", style="SettingsTitle.TLabel").grid(row=0, column=0, sticky="w")
 
-        ttk.Label(account_frame, text="Username", style="Muted.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
-        self.username_value = tk.StringVar()
-        self.username_entry = ttk.Entry(account_frame, textvariable=self.username_value, style="Neumo.TEntry")
-        self.username_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        admin_row = tk.Frame(sidebar, bg=self.colors["bg"])
+        admin_row.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        admin_row.columnconfigure(0, weight=1)
+        admin_row.columnconfigure(1, weight=1)
+        self.config_button = ttk.Button(admin_row, text="Configuration", style="NeumoAccent.TButton", command=self.open_config_settings)
+        self.config_button.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.view_scores_button = ttk.Button(admin_row, text="View Scores", style="NeumoAccent.TButton", command=self.open_scores_view)
+        self.view_scores_button.grid(row=0, column=1, sticky="ew")
 
-        ttk.Label(account_frame, text="Password", style="Muted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w")
-        self.password_value = tk.StringVar()
-        self.password_entry = ttk.Entry(account_frame, textvariable=self.password_value, style="Neumo.TEntry", show="*")
-        self.password_entry.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 8))
-
-        self.sign_in_button = ttk.Button(account_frame, text="Sign In", style="NeumoAccent.TButton", command=self.sign_in)
-        self.sign_in_button.grid(row=4, column=0, sticky="ew", pady=(2, 6), padx=(0, 6))
-        self.register_button = ttk.Button(account_frame, text="Register New Account", style="Neumo.TButton", command=lambda: self.open_register_dialog())
-        self.register_button.grid(row=4, column=1, sticky="ew", pady=(2, 6))
-
-        self._section_label(sidebar, "Audio Controls").grid(row=3, column=0, sticky="w", pady=(12, 4))
+        self._section_label(sidebar, "Audio Controls").grid(row=3, column=0, sticky="w", pady=(8, 4))
         distortion_row = tk.Frame(sidebar, bg=self.colors["bg"])
-        distortion_row.grid(row=4, column=0, sticky="ew", pady=(0, 8))
+        distortion_row.grid(row=4, column=0, sticky="w", pady=(0, 8))
         self.distortion_status = tk.StringVar(value="off_distortion")
-        self.distortion_on = ttk.Radiobutton(
+        self.distortion_buttons = self._build_toggle_buttons(
             distortion_row,
-            text="Distortion On",
-            variable=self.distortion_status,
-            value="on_distortion",
-            command=self.update_distortion_setting,
-            style="Neumo.TRadiobutton"
+            self.distortion_status,
+            [("Distortion On", "on_distortion"), ("Distortion Off", "off_distortion")],
+            command=self.update_distortion_setting
         )
-        self.distortion_on.pack(side="left", padx=(0, 8))
-        self.distortion_off = ttk.Radiobutton(
-            distortion_row,
-            text="Distortion Off",
-            variable=self.distortion_status,
-            value="off_distortion",
-            command=self.update_distortion_setting,
-            style="Neumo.TRadiobutton"
-        )
-        self.distortion_off.pack(side="left")
 
         self._section_label(sidebar, "Voice Language").grid(row=5, column=0, sticky="w", pady=(2, 2))
         self.language_frame = tk.Frame(sidebar, bg=self.colors["bg"])
         self.language_frame.grid(row=6, column=0, sticky="w", pady=(0, 10))
-
-        self.language_en = ttk.Radiobutton(
+        self.language_buttons = self._build_toggle_buttons(
             self.language_frame,
-            text="English",
-            variable=self.language_var,
-            value="English",
-            command=self.change_language,
-            style="Neumo.TRadiobutton"
+            self.language_var,
+            [("English", "English"), ("Spanish", "Spanish")],
+            command=self.change_language
         )
-        self.language_en.pack(side="left", padx=(0, 10))
-
-        self.language_es = ttk.Radiobutton(
-            self.language_frame,
-            text="Spanish",
-            variable=self.language_var,
-            value="Spanish",
-            command=self.change_language,
-            style="Neumo.TRadiobutton"
-        )
-        self.language_es.pack(side="left")
 
         self._section_label(sidebar, "TTS Speed").grid(row=7, column=0, sticky="w", pady=(4, 2))
         self.speed_var = tk.DoubleVar(value=1.0)
@@ -655,24 +892,40 @@ class AudioTypingTest:
         self.highlight_var = tk.StringVar(value="off_highlight")
         self._section_label(sidebar, "Show Spelling Errors").grid(row=10, column=0, sticky="w", pady=(14, 2))
         highlight_row = tk.Frame(sidebar, bg=self.colors["bg"])
-        highlight_row.grid(row=11, column=0, sticky="w", pady=(0, 4))
-        self.highlight_on = ttk.Radiobutton(highlight_row, text="Yes", variable=self.highlight_var, value="on_highlight", command=self.on_highlight_changed, style="Neumo.TRadiobutton")
-        self.highlight_on.pack(side="left", padx=(0, 12))
-        self.highlight_off = ttk.Radiobutton(highlight_row, text="No", variable=self.highlight_var, value="off_highlight", command=self.on_highlight_changed, style="Neumo.TRadiobutton")
-        self.highlight_off.pack(side="left")
+        highlight_row.grid(row=11, column=0, sticky="w", pady=(0, 10))
+        self.highlight_buttons = self._build_toggle_buttons(
+            highlight_row,
+            self.highlight_var,
+            [("Yes", "on_highlight"), ("No", "off_highlight")],
+            command=self.on_highlight_changed
+        )
 
-        self.view_scores_button = ttk.Button(sidebar, text="View Scores", style="Neumo.TButton", command=self.open_scores_view)
-        self.view_scores_button.grid(row=12, column=0, sticky="ew", pady=(14, 4))
+        self._section_label(sidebar, "Account").grid(row=12, column=0, sticky="w", pady=(8, 4))
+        account_frame = tk.Frame(sidebar, bg=self.colors["bg"])
+        account_frame.grid(row=13, column=0, sticky="ew", pady=(0, 6))
+        account_frame.columnconfigure(0, weight=1)
+        account_frame.columnconfigure(1, weight=1)
 
-        self.config_button = ttk.Button(sidebar, text="Configuration Settings", style="Neumo.TButton", command=self.open_config_settings)
-        self.config_button.grid(row=13, column=0, sticky="ew")
+        ttk.Label(account_frame, text="Username", style="Muted.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self.username_value = tk.StringVar()
+        self.username_entry = ttk.Entry(account_frame, textvariable=self.username_value, style="Neumo.TEntry")
+        self.username_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        ttk.Label(account_frame, text="Password", style="Muted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w")
+        self.password_value = tk.StringVar()
+        self.password_entry = ttk.Entry(account_frame, textvariable=self.password_value, style="Neumo.TEntry", show="*")
+        self.password_entry.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        self.sign_in_button = ttk.Button(account_frame, text="Sign In", style="NeumoAccent.TButton", command=self.sign_in)
+        self.sign_in_button.grid(row=4, column=0, sticky="ew", pady=(2, 6), padx=(0, 6))
+        self.register_button = ttk.Button(account_frame, text="Register", style="Neumo.TButton", command=lambda: self.open_register_dialog())
+        self.register_button.grid(row=4, column=1, sticky="ew", pady=(2, 6))
 
         # Main content
         header = tk.Frame(main_content, bg=self.colors["bg"])
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
         ttk.Label(header, text="echoType", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(header, text="Soft, tactile audio typing flow", style="Muted.TLabel").grid(row=1, column=0, sticky="w")
 
         chip_row = tk.Frame(header, bg=self.colors["bg"])
         chip_row.grid(row=0, column=1, rowspan=2, sticky="e")
@@ -686,11 +939,37 @@ class AudioTypingTest:
         self.load_file_button = ttk.Button(control_row, text="Load Text for TTS", style="NeumoAccent.TButton", command=self.load_file_for_tts)
         self.load_file_button.grid(row=0, column=0, padx=(0, 8))
 
-        self.play_pause_button = ttk.Button(control_row, text="⏵", style="Icon.TButton", width=3, command=self.toggle_play_pause)
-        self.play_pause_button.grid(row=0, column=1, padx=4, sticky="w")
+        square_size = max(28, int(ICON_TARGET_PX * max(0.8, self.icon_scale)))
 
-        self.reset_button = ttk.Button(control_row, text="⟳", style="Icon.TButton", width=3, command=self.reset_audio)
-        self.reset_button.grid(row=0, column=2, padx=4, sticky="w")
+        play_holder = tk.Frame(control_row, width=square_size, height=square_size, bg=self.colors["bg"])
+        play_holder.grid(row=0, column=1, padx=4, sticky="w")
+        play_holder.grid_propagate(False)
+        play_width = 0 if self.icon_images.get("play") else 3
+        self.play_pause_button = ttk.Button(
+            play_holder,
+            text=self.play_symbol if not self.icon_images.get("play") else "",
+            image=self.icon_images.get("play"),
+            style="Icon.TButton",
+            width=play_width,
+            command=self.toggle_play_pause,
+            compound="center"
+        )
+        self.play_pause_button.pack(fill="both", expand=True)
+
+        reset_holder = tk.Frame(control_row, width=square_size, height=square_size, bg=self.colors["bg"])
+        reset_holder.grid(row=0, column=2, padx=4, sticky="w")
+        reset_holder.grid_propagate(False)
+        reset_width = 0 if self.icon_images.get("reset") else 3
+        self.reset_button = ttk.Button(
+            reset_holder,
+            text="R" if not self.icon_images.get("reset") else "",
+            image=self.icon_images.get("reset"),
+            style="Icon.TButton",
+            width=reset_width,
+            command=self.reset_audio,
+            compound="center"
+        )
+        self.reset_button.pack(fill="both", expand=True)
 
         self.user_chip = ttk.Label(control_row, text="Not signed in", style="Tag.TLabel")
         self.user_chip.grid(row=0, column=3, sticky="e")
@@ -767,6 +1046,18 @@ class AudioTypingTest:
                 )
                 return None
         return {}
+
+    def check_empty_user_db_is_admin(self):
+        """Return True if no users exist, granting initial admin access for setup."""
+        db_path = self.get_user_db_path()
+        if not db_path.exists():
+            return True
+        try:
+            with open(db_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return not bool(data)
+        except Exception:
+            return False
 
     def save_user_db(self, user_db):
         db_path = self.get_user_db_path()
@@ -997,7 +1288,7 @@ class AudioTypingTest:
         ttk.Label(user_frame, text="Select User:", style="Muted.TLabel").grid(row=0, column=0, padx=10, pady=5, sticky="w")
         user_listbox = tk.Listbox(
             user_frame,
-            height=8,
+            height=4,
             exportselection=False,
             bg=self.colors["sunken"],
             fg=self.colors["text"],
@@ -1084,6 +1375,14 @@ class AudioTypingTest:
                 current_user_label.config(text=self.current_username or "Not signed in")
 
         ttk.Button(all_frame, text="Delete All Data", style="NeumoDanger.TButton", command=handle_delete_all).grid(row=2, column=0, columnspan=2, padx=10, pady=(5, 10))
+
+        # Backup / Transfer section
+        backup_frame = tk.LabelFrame(body, text="Backup / Transfer", bg=self.colors["bg"], fg=self.colors["text"])
+        backup_frame.pack(fill="x", padx=4, pady=6)
+        ttk.Button(backup_frame, text="Export Data", style="Neumo.TButton", command=self.trigger_export).grid(row=0, column=0, padx=10, pady=6, sticky="w")
+        ttk.Button(backup_frame, text="Import Data", style="Neumo.TButton", command=self.trigger_import).grid(row=0, column=1, padx=10, pady=6, sticky="w")
+        backup_frame.columnconfigure(0, weight=1)
+        backup_frame.columnconfigure(1, weight=1)
         self.fit_window_to_content(dialog, min_size=(720, 650))
 
     def open_scores_view(self):
@@ -1104,6 +1403,12 @@ class AudioTypingTest:
 
         body_card, body = self._build_card(dialog, padding=14)
         body_card.pack(fill="both", expand=True, padx=16, pady=16)
+        try:
+            body_card.pack_propagate(False)
+            body_card.configure(width=980, height=620)
+            dialog.minsize(1100, 720)
+        except Exception:
+            pass
 
         top_frame = tk.Frame(body, bg=self.colors["bg"])
         top_frame.pack(fill="x", padx=4, pady=6)
@@ -1119,11 +1424,13 @@ class AudioTypingTest:
         name_label = ttk.Label(top_frame, text="Name: ", style="Muted.TLabel")
         name_label.pack(side="left", padx=10)
 
-        table_frame = tk.Frame(body, bg=self.colors["bg"])
-        table_frame.pack(fill="both", expand=True, padx=4, pady=6)
+        table_wrapper = tk.Frame(body, bg=self.colors["bg"])
+        table_wrapper.pack(fill="both", expand=True, padx=4, pady=6)
+        table_wrapper.rowconfigure(0, weight=1, minsize=360)
+        table_wrapper.columnconfigure(0, weight=1)
 
         columns = ("test_no", "time", "wpm", "accuracy", "details")
-        tree = ttk.Treeview(table_frame, columns=columns, show="headings")
+        tree = ttk.Treeview(table_wrapper, columns=columns, show="headings", height=10, style="Neumo.Treeview")
         headers = {
             "test_no": "Test No.",
             "time": "Time",
@@ -1133,12 +1440,14 @@ class AudioTypingTest:
         }
         for col, text in headers.items():
             tree.heading(col, text=text)
-            tree.column(col, width=120, anchor="center")
+            tree.column(col, width=160, minwidth=140, anchor="center", stretch=True)
 
-        tree.pack(fill="both", expand=True, side="left")
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
-        scrollbar.pack(side="right", fill="y")
-        tree.configure(yscrollcommand=scrollbar.set)
+        tree.grid(row=0, column=0, sticky="nsew", padx=4, pady=(2, 8))
+        scrollbar_y = ttk.Scrollbar(table_wrapper, orient="vertical", command=tree.yview)
+        scrollbar_y.grid(row=0, column=1, sticky="ns")
+        scrollbar_x = ttk.Scrollbar(table_wrapper, orient="horizontal", command=tree.xview)
+        scrollbar_x.grid(row=1, column=0, sticky="ew")
+        tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
 
         def populate(user):
             user_label.config(text=f"User: {user or 'None'}")
@@ -1152,6 +1461,8 @@ class AudioTypingTest:
                     rec.get("accuracy", ""),
                     rec.get("details", "")
                 ))
+            # spacer row to avoid bottom clipping
+            tree.insert("", "end", values=("", "", "", "", ""))
             record = user_db.get(user, {}) if isinstance(user_db.get(user, {}), dict) else {}
             fname = record.get("first_name") or (records[0].get("first_name") if records else "N/A")
             lname = record.get("last_name") or (records[0].get("last_name") if records else "N/A")
@@ -1201,7 +1512,11 @@ class AudioTypingTest:
 
         download_btn = ttk.Button(body, text="Download Selected User Scores", style="NeumoAccent.TButton", command=download_csv)
         download_btn.pack(pady=(6, 0))
-        self.fit_window_to_content(dialog, min_size=(820, 520))
+        try:
+            dialog.update_idletasks()
+            dialog.geometry(f"{max(1100, dialog.winfo_reqwidth()+40)}x{max(720, dialog.winfo_reqheight()+40)}")
+        except Exception:
+            self.fit_window_to_content(dialog, min_size=(1100, 720))
 
     def open_register_dialog(self, suggested_username=None):
         dialog = tk.Toplevel(self.root)
@@ -1326,19 +1641,22 @@ class AudioTypingTest:
         # Enable/disable admin-only controls
         admin_widgets = [
             self.config_button,
-            self.distortion_on,
-            self.distortion_off,
-            getattr(self, "language_en", None),
-            getattr(self, "language_es", None),
+            self.view_scores_button,
+            getattr(self, "distortion_buttons", []),
+            getattr(self, "language_buttons", []),
             self.speed_slider,
             self.apply_speed_button,
-            self.highlight_on,
-            self.highlight_off,
-            self.view_scores_button
+            getattr(self, "highlight_buttons", [])
         ]
         state = "normal" if self.current_is_admin else "disabled"
         for widget in admin_widgets:
-            if widget:
+            if isinstance(widget, list):
+                for btn in widget:
+                    try:
+                        btn[0].config(state=state) if isinstance(btn, tuple) else btn.config(state=state)
+                    except Exception:
+                        pass
+            elif widget:
                 widget.config(state=state)
 
     def delete_user_and_data(self, username, current_user_password):
@@ -1593,6 +1911,8 @@ class AudioTypingTest:
             self.tts_manager.set_distortion_enabled(enabled)
         if self.current_is_admin:
             self.save_ui_settings()
+        if hasattr(self, "distortion_buttons"):
+            self._update_toggle_styles(self.distortion_status.get(), self.distortion_buttons)
 
     def change_language(self, force=False):
         if not force and not self.current_is_admin:
@@ -1626,6 +1946,8 @@ class AudioTypingTest:
                 self.update_play_pause_button(False)
                 self.text_manager.hide_results()
                 self._refresh_language_chip()
+                if hasattr(self, "language_buttons"):
+                    self._update_toggle_styles(self.language_var.get(), self.language_buttons)
             except FileNotFoundError as exc:
                 messagebox.showerror("Voice Not Found", str(exc))
                 revert_selection()
@@ -1655,6 +1977,8 @@ class AudioTypingTest:
                 self.update_play_pause_button(False)
                 self.text_manager.hide_results()
                 self.current_language = selection
+                if hasattr(self, "language_buttons"):
+                    self._update_toggle_styles(self.language_var.get(), self.language_buttons)
                 if response is True:
                     # Use saved audio
                     if new_lang_path and not self.load_existing_generation(new_lang_path, existing_text):
@@ -1676,6 +2000,8 @@ class AudioTypingTest:
                 self.update_play_pause_button(False)
                 self.text_manager.hide_results()
                 self.current_language = selection
+                if hasattr(self, "language_buttons"):
+                    self._update_toggle_styles(self.language_var.get(), self.language_buttons)
                 self.regeneration_reason = "language"
                 self.generate_tts_in_background(existing_text, save_key=file_key, language=selection)
             if self.current_is_admin:
@@ -1687,6 +2013,8 @@ class AudioTypingTest:
             messagebox.showerror("Voice Error", f"Could not switch voice:\n{exc}")
             revert_selection()
         self._refresh_language_chip()
+        if hasattr(self, "language_buttons"):
+            self._update_toggle_styles(self.language_var.get(), self.language_buttons)
 
     def try_show_file_loaded_message(self):
         # Deprecated shim; route to unified message handler
@@ -1864,11 +2192,15 @@ class AudioTypingTest:
         if distortion in ("on_distortion", "off_distortion"):
             self.distortion_status.set(distortion)
             self.update_distortion_setting(force=True)
+            if hasattr(self, "distortion_buttons"):
+                self._update_toggle_styles(self.distortion_status.get(), self.distortion_buttons)
 
         language = settings.get("language")
         if language in self.voice_options:
             self.language_var.set(language)
             self.change_language(force=True)
+            if hasattr(self, "language_buttons"):
+                self._update_toggle_styles(self.language_var.get(), self.language_buttons)
 
         try:
             speed = float(settings.get("speed", 0))
@@ -1882,6 +2214,8 @@ class AudioTypingTest:
         highlight = settings.get("highlight")
         if highlight in ("on_highlight", "off_highlight"):
             self.highlight_var.set(highlight)
+            if hasattr(self, "highlight_buttons"):
+                self._update_toggle_styles(self.highlight_var.get(), self.highlight_buttons)
 
         self.update_admin_controls()
 
@@ -1928,7 +2262,12 @@ class AudioTypingTest:
 
     def update_play_pause_button(self, playing=False):
         if hasattr(self, "play_pause_button"):
-            self.play_pause_button.config(text="⏸" if playing else "▶")
+            if playing and self.icon_images.get("pause"):
+                self.play_pause_button.config(image=self.icon_images.get("pause"), text="")
+            elif not playing and self.icon_images.get("play"):
+                self.play_pause_button.config(image=self.icon_images.get("play"), text="")
+            else:
+                self.play_pause_button.config(text=self.pause_symbol if playing else self.play_symbol, image="")
 
     def is_audio_playing(self):
         stream = getattr(self.tts_manager, "stream", None)
@@ -2222,6 +2561,8 @@ class AudioTypingTest:
         if not self.current_is_admin:
             return
         self.save_ui_settings()
+        if hasattr(self, "highlight_buttons"):
+            self._update_toggle_styles(self.highlight_var.get(), self.highlight_buttons)
 
 
     

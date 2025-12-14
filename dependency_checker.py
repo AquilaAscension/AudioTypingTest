@@ -13,7 +13,8 @@ REQUIRED_LIBRARIES = {
     "sounddevice": "sounddevice",
     "soundfile": "soundfile",
     "numpy": "numpy",
-    "scipy": "scipy"
+    "scipy": "scipy",
+    "darkdetect": "darkdetect"
 }
 
 
