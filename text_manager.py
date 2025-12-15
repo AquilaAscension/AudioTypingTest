@@ -2,6 +2,7 @@
 # Copyright (C) 2025 echoType
 
 import tkinter as tk
+from tkinter import messagebox
 import re
 
 
@@ -15,9 +16,6 @@ class TextManager:
         header = tk.Frame(self.root, bg=self.palette["bg"])
         header.pack(fill="x", pady=(0, 8))
 
-        self.results_label = tk.Label(header, text="", font=self.fonts["display"], fg=self.palette["accent"], bg=self.palette["bg"])
-        self.results_label.pack(side="left")
-        self.results_label.pack_forget()
 
         self.timer_label = tk.Label(header, text="Time: 0.0s", font=self.fonts["caption"], fg=self.palette["muted"], bg=self.palette["bg"])
         self.timer_label.pack(side="right")
@@ -70,11 +68,8 @@ class TextManager:
         self.typing_box.delete("1.0", "end")
 
     def show_results(self, results):
-        self.results_label.config(text=results)
-        self.results_label.pack(side="left")
+        messagebox.showinfo("Results", results)
 
-    def hide_results(self):
-        self.results_label.pack_forget()
 
     def show_timer(self):
         self.timer_label.pack(side="right")

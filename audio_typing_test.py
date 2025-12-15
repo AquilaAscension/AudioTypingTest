@@ -1742,7 +1742,6 @@ class AudioTypingTest:
         self.tts_manager.deleteTTSFile()
         self.set_logged_in_state(None)
         self.text_manager.clear_text()
-        self.text_manager.hide_results()
         self.progress_bar_manager.reset_progress_bar()
 
         if errors:
@@ -1947,7 +1946,6 @@ class AudioTypingTest:
                 self.current_language = selection
                 self.progress_bar_manager.reset_progress_bar()
                 self.update_play_pause_button(False)
-                self.text_manager.hide_results()
                 self._refresh_language_chip()
                 if hasattr(self, "language_buttons"):
                     self._update_toggle_styles(self.language_var.get(), self.language_buttons)
@@ -1978,7 +1976,6 @@ class AudioTypingTest:
                 self.tts_manager.set_voice_model(model_name)
                 self.progress_bar_manager.reset_progress_bar()
                 self.update_play_pause_button(False)
-                self.text_manager.hide_results()
                 self.current_language = selection
                 if hasattr(self, "language_buttons"):
                     self._update_toggle_styles(self.language_var.get(), self.language_buttons)
@@ -2001,7 +1998,6 @@ class AudioTypingTest:
                 self.tts_manager.set_voice_model(model_name)
                 self.progress_bar_manager.reset_progress_bar()
                 self.update_play_pause_button(False)
-                self.text_manager.hide_results()
                 self.current_language = selection
                 if hasattr(self, "language_buttons"):
                     self._update_toggle_styles(self.language_var.get(), self.language_buttons)
@@ -2294,7 +2290,6 @@ class AudioTypingTest:
     def reset_for_new_audio(self):
         self.stop_timer_display()
         self.start_time = None
-        self.text_manager.hide_results()
         # Clear any previous highlights/errors from the typing box
         self.text_manager.typing_box.tag_remove("error", "1.0", "end")
         self.text_manager.typing_box.tag_remove("correct", "1.0", "end")
