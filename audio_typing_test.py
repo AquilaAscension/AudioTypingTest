@@ -214,6 +214,23 @@ class AudioTypingTest:
     def _init_neumorphic_theme(self):
         self.root.configure(bg=self.colors["bg"])
 
+        def _mix(hex_a: str, hex_b: str, b_weight: float) -> str:
+            b_weight = max(0.0, min(1.0, float(b_weight)))
+            a_weight = 1.0 - b_weight
+
+            def to_rgb(hex_color: str):
+                hex_color = (hex_color or "").lstrip("#")
+                if len(hex_color) != 6:
+                    return (0, 0, 0)
+                return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+            ar, ag, ab = to_rgb(hex_a)
+            br, bg, bb = to_rgb(hex_b)
+            r = int(ar * a_weight + br * b_weight)
+            g = int(ag * a_weight + bg * b_weight)
+            b = int(ab * a_weight + bb * b_weight)
+            return f"#{r:02x}{g:02x}{b:02x}"
+
         try:
             default_font = tkfont.nametofont("TkDefaultFont")
             default_font.configure(family=self.fonts["body"][0], size=self.fonts["body"][1])
@@ -330,10 +347,11 @@ class AudioTypingTest:
         toggle_base = dict(btn_base)
         toggle_base.update(padding=(12, 8), background=self.colors["sunken"])
         self.style.configure("Toggle.TButton", **toggle_base)
+        disabled_surface = _mix(self.colors["sunken"], self.colors["bg"], 0.45)
         self.style.map(
             "Toggle.TButton",
             background=[
-                ("disabled", self.colors["sunken"]),
+                ("disabled", disabled_surface),
                 ("pressed", self.colors["shadow_light"]),
                 ("active", self.colors["shadow_light"])
             ],
@@ -344,14 +362,16 @@ class AudioTypingTest:
         toggle_active = dict(btn_base)
         toggle_active.update(padding=(12, 8), background=self.colors["accent"], foreground="white")
         self.style.configure("ToggleActive.TButton", **toggle_active)
+        disabled_accent = _mix(self.colors["accent"], self.colors["bg"], 0.55)
+        disabled_accent_fg = _mix("#ffffff", self.colors["bg"], 0.35)
         self.style.map(
             "ToggleActive.TButton",
             background=[
-                ("disabled", self.colors["sunken"]),
+                ("disabled", disabled_accent),
                 ("pressed", self.colors["accent_dark"]),
                 ("active", self.colors["accent_dark"])
             ],
-            foreground=[("disabled", self.colors["muted"])]
+            foreground=[("disabled", disabled_accent_fg)]
         )
 
         self.style.configure(
