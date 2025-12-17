@@ -12,4 +12,3 @@ dist/
 build/
 /__pycache__/
 config.json
-echoType.spec
