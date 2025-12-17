@@ -846,9 +846,10 @@ class AudioTypingTest:
         shell.columnconfigure(1, weight=2)
         shell.rowconfigure(0, weight=1)
 
-        self.sidebar, sidebar = self._build_card(shell, padding=18)
-        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
-        sidebar.columnconfigure(0, weight=1)
+        self.sidebar_card, sidebar_content_container = self._build_card(shell, padding=18)
+        self.sidebar_card.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
+        sidebar_content_container.columnconfigure(0, weight=1)
+        sidebar_content_container.rowconfigure(0, weight=1)
 
         self.main_panel, main_content = self._build_card(shell, padding=22)
         self.main_panel.grid(row=0, column=1, sticky="nsew")
@@ -857,9 +858,46 @@ class AudioTypingTest:
 
         self.load_icons()
 
-        ttk.Label(sidebar, text="Settings", style="SettingsTitle.TLabel").grid(row=0, column=0, sticky="w")
+        self.settings_canvas = tk.Canvas(
+            sidebar_content_container,
+            bg=self.colors["bg"],
+            highlightthickness=0
+        )
+        self.settings_canvas.grid(row=0, column=0, sticky="nsew")
 
-        admin_row = tk.Frame(sidebar, bg=self.colors["bg"])
+        self.settings_scrollbar = ttk.Scrollbar(
+            sidebar_content_container,
+            orient="vertical",
+            command=self.settings_canvas.yview
+        )
+        self.settings_scrollbar.grid(row=0, column=1, sticky="ns") # Place scrollbar next to canvas
+        self.settings_canvas.configure(yscrollcommand=self.settings_scrollbar.set)
+        self.sidebar = ttk.Frame(self.settings_canvas,style="TFrame")
+        self.sidebar.columnconfigure(0, weight=1)
+        self.settings_canvas_window = self.settings_canvas.create_window(
+            (0, 0), 
+            window=self.sidebar, 
+            anchor="nw", 
+            tags="settings_content_frame"
+        )
+        self.sidebar.bind(
+            "<Configure>", 
+            lambda e: self.settings_canvas.configure(
+                scrollregion=self.settings_canvas.bbox("all")
+            )
+        )
+
+        self.settings_canvas.bind(
+            "<Configure>", 
+            lambda e: self.settings_canvas.itemconfigure(
+                self.settings_canvas_window, 
+                width=e.width
+            )
+        )
+
+        ttk.Label(self.sidebar, text="Settings", style="SettingsTitle.TLabel").grid(row=0, column=0, sticky="w")
+
+        admin_row = tk.Frame(self.sidebar, bg=self.colors["bg"])
         admin_row.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         admin_row.columnconfigure(0, weight=1)
         admin_row.columnconfigure(1, weight=1)
@@ -868,8 +906,8 @@ class AudioTypingTest:
         self.view_scores_button = ttk.Button(admin_row, text="View Scores", style="NeumoAccent.TButton", command=self.open_scores_view)
         self.view_scores_button.grid(row=0, column=1, sticky="ew")
 
-        self._section_label(sidebar, "Audio Controls").grid(row=3, column=0, sticky="w", pady=(8, 4))
-        distortion_row = tk.Frame(sidebar, bg=self.colors["bg"])
+        self._section_label(self.sidebar, "Audio Controls").grid(row=3, column=0, sticky="w", pady=(8, 4))
+        distortion_row = tk.Frame(self.sidebar, bg=self.colors["bg"])
         distortion_row.grid(row=4, column=0, sticky="w", pady=(0, 8))
         self.distortion_status = tk.StringVar(value="off_distortion")
         self.distortion_buttons = self._build_toggle_buttons(
@@ -879,8 +917,8 @@ class AudioTypingTest:
             command=self.update_distortion_setting
         )
 
-        self._section_label(sidebar, "Voice Language").grid(row=5, column=0, sticky="w", pady=(2, 2))
-        self.language_frame = tk.Frame(sidebar, bg=self.colors["bg"])
+        self._section_label(self.sidebar, "Voice Language").grid(row=5, column=0, sticky="w", pady=(2, 2))
+        self.language_frame = tk.Frame(self.sidebar, bg=self.colors["bg"])
         self.language_frame.grid(row=6, column=0, sticky="w", pady=(0, 10))
         self.language_buttons = self._build_toggle_buttons(
             self.language_frame,
@@ -889,10 +927,10 @@ class AudioTypingTest:
             command=self.change_language
         )
 
-        self._section_label(sidebar, "TTS Speed").grid(row=7, column=0, sticky="w", pady=(4, 2))
+        self._section_label(self.sidebar, "TTS Speed").grid(row=7, column=0, sticky="w", pady=(4, 2))
         self.speed_var = tk.DoubleVar(value=1.0)
         self.speed_slider = tk.Scale(
-            sidebar,
+            self.sidebar,
             from_=0.5,
             to=2.0,
             resolution=0.1,
@@ -909,12 +947,12 @@ class AudioTypingTest:
             activebackground=self.colors["shadow_light"],
         )
         self.speed_slider.grid(row=8, column=0, sticky="ew", pady=(0, 6))
-        self.apply_speed_button = ttk.Button(sidebar, text="Apply Speed (1.0x)", style="NeumoAccent.TButton", command=self.apply_speed_change, state="disabled")
+        self.apply_speed_button = ttk.Button(self.sidebar, text="Apply Speed (1.0x)", style="NeumoAccent.TButton", command=self.apply_speed_change, state="disabled")
         self.apply_speed_button.grid(row=9, column=0, sticky="ew")
 
         self.highlight_var = tk.StringVar(value="off_highlight")
-        self._section_label(sidebar, "Show Spelling Errors").grid(row=10, column=0, sticky="w", pady=(14, 2))
-        highlight_row = tk.Frame(sidebar, bg=self.colors["bg"])
+        self._section_label(self.sidebar, "Show Spelling Errors").grid(row=10, column=0, sticky="w", pady=(14, 2))
+        highlight_row = tk.Frame(self.sidebar, bg=self.colors["bg"])
         highlight_row.grid(row=11, column=0, sticky="w", pady=(0, 10))
         self.highlight_buttons = self._build_toggle_buttons(
             highlight_row,
@@ -923,8 +961,8 @@ class AudioTypingTest:
             command=self.on_highlight_changed
         )
 
-        self._section_label(sidebar, "Account").grid(row=12, column=0, sticky="w", pady=(8, 4))
-        account_frame = tk.Frame(sidebar, bg=self.colors["bg"])
+        self._section_label(self.sidebar, "Account").grid(row=12, column=0, sticky="w", pady=(8, 4))
+        account_frame = tk.Frame(self.sidebar, bg=self.colors["bg"])
         account_frame.grid(row=13, column=0, sticky="ew", pady=(0, 6))
         account_frame.columnconfigure(0, weight=1)
         account_frame.columnconfigure(1, weight=1)

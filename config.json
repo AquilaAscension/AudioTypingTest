@@ -1,0 +1,10 @@
+{
+  "app_data_dir": "C:\\Users\\joeva\\OneDrive\\Documents\\AudioTypingTest-1\\echoType_data",
+  "encryption_key": "21ff1b25099c9b0fafb4f8422026180bea1937f0de5bf80ac4b8d8e657d22f57",
+  "ui_settings": {
+    "distortion": "on_distortion",
+    "language": "English",
+    "speed": 1.0,
+    "highlight": "off_highlight"
+  }
+}
