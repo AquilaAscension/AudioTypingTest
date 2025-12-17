@@ -10,5 +10,5 @@ echoType_data/
 typing_test_scores.csv
 dist/
 build/
-/__pycache__/
+__pycache__/
 config.json
