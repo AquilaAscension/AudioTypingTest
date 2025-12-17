@@ -10,18 +10,44 @@ if sys.platform == "win32":
     except Exception:
         pass
     
-from dependency_checker import ensure_dependencies_installed
-ensure_dependencies_installed()
+#from dependency_checker import ensure_dependencies_installed
+#ensure_dependencies_installed()
 
 
 import atexit
 import signal
+from pathlib import Path
 import tkinter as tk
 import tkinter.ttk as ttk
 from audio_typing_test import AudioTypingTest
 
+def _set_app_icon(root: tk.Tk) -> None:
+    base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    icon_dir = base_dir / "icons"
+
+    ico_path = icon_dir / "echoType.ico"
+    png_path = icon_dir / "echoType.png"
+
+    # Windows titlebar/taskbar icon (when available)
+    if sys.platform.startswith("win") and ico_path.is_file():
+        try:
+            root.iconbitmap(default=str(ico_path))
+        except Exception:
+            pass
+
+    # Cross-platform icon (requires a PNG)
+    if png_path.is_file():
+        try:
+            img = tk.PhotoImage(file=str(png_path))
+            root.iconphoto(True, img)
+            # Keep a reference to prevent garbage collection.
+            root._echotype_icon = img  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
 if __name__ == "__main__":
     root = tk.Tk()
+    _set_app_icon(root)
     try:
         root.state("zoomed")
     except tk.TclError:

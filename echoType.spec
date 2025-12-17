@@ -1,6 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import sys
+from typing import Optional
 
 from PyInstaller.utils.hooks import collect_all, collect_data_files
 
@@ -14,6 +16,9 @@ def _require_dir(path: Path, help_text: str) -> Path:
     if path.is_dir():
         return path
     raise SystemExit(help_text)
+
+def _optional_file(path: Path) -> Optional[str]:
+    return str(path) if path.is_file() else None
 
 def _collect_dir_files(src_dir: Path, dest_root: str) -> list[tuple[str, str]]:
     collected: list[tuple[str, str]] = []
@@ -68,6 +73,13 @@ except Exception:
     pass
 
 
+app_icon = None
+if sys.platform.startswith("win"):
+    app_icon = _optional_file(project_root / "icons" / "echoType.ico")
+elif sys.platform == "darwin":
+    app_icon = _optional_file(project_root / "icons" / "echoType.icns")
+
+
 a = Analysis(
     ["main.py"],
     pathex=[str(project_root)],
@@ -92,6 +104,7 @@ exe = EXE(
     name="echoType",
     debug=False,
     bootloader_ignore_signals=False,
+    icon=app_icon,
     strip=False,
     upx=True,
     console=False,
