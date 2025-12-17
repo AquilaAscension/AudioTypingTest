@@ -9,6 +9,5 @@ voices/
 echoType_data/
 typing_test_scores.csv
 dist/
-echoType.spec
 build/
 __pycache__

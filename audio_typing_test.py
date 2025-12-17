@@ -106,13 +106,19 @@ class AudioTypingTest:
         self.fonts = NEUMORPH_FONTS
         self.play_symbol = ">"
         self.pause_symbol = "||"
-        self.icon_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "icons"
+        self.runtime_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+        self.icon_dir = self.runtime_dir / "icons"
         self.icon_images = {}
         self.icon_scale = ICON_SCALE
         self._init_neumorphic_theme()
 
-        self.runtime_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-        self.config_path = self.runtime_dir / "config.json"
+        self.config_dir = self.default_config_dir()
+        try:
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # Last resort: fall back to runtime dir (may be temporary in onefile builds)
+            self.config_dir = self.runtime_dir
+        self.config_path = self.config_dir / "config.json"
         self.app_data_dir = self.load_app_data_dir()
         self.details_dir = self.app_data_dir / "Details"
         self.generations_dir = self.app_data_dir / "Generations"
@@ -480,13 +486,27 @@ class AudioTypingTest:
             btn.configure(style=style)
 
     # Configuration and path utilities
-    def default_app_data_dir(self):
+    def default_config_dir(self):
+        app_name = "echoType"
         plat = sys.platform
         if plat.startswith("win"):
-            return Path("C:/Program Files/echoType")
+            base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+            return Path(base) / app_name
         if plat == "darwin":
-            return Path("/Applications/echoType")
-        return Path("/usr/bin/echoType")
+            return Path.home() / "Library" / "Application Support" / app_name
+        base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+        return Path(base) / app_name
+
+    def default_app_data_dir(self):
+        app_name = "echoType"
+        plat = sys.platform
+        if plat.startswith("win"):
+            base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Local")
+            return Path(base) / app_name
+        if plat == "darwin":
+            return Path.home() / "Library" / "Application Support" / app_name
+        base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+        return Path(base) / app_name
 
     def load_config(self):
         if self.config_path.exists():
@@ -561,16 +581,21 @@ class AudioTypingTest:
         if configured:
             candidate = Path(configured).expanduser()
             if not candidate.is_absolute():
-                candidate = (self.runtime_dir / candidate).resolve()
+                candidate = (self.config_dir / candidate).resolve()
         else:
             candidate = self.default_app_data_dir()
         try:
             candidate.mkdir(parents=True, exist_ok=True)
             return candidate
         except Exception:
-            fallback = self.runtime_dir / "echoType_data"
-            fallback.mkdir(parents=True, exist_ok=True)
-            return fallback
+            fallback = self.default_app_data_dir()
+            try:
+                fallback.mkdir(parents=True, exist_ok=True)
+                return fallback
+            except Exception:
+                fallback = self.runtime_dir / "echoType_data"
+                fallback.mkdir(parents=True, exist_ok=True)
+                return fallback
 
     def ensure_app_dirs(self):
         for path in [self.app_data_dir, self.details_dir, self.generations_dir]:
@@ -649,7 +674,7 @@ class AudioTypingTest:
     def update_app_data_dir(self, new_dir: Path):
         new_dir = Path(new_dir).expanduser()
         if not new_dir.is_absolute():
-            new_dir = (self.runtime_dir / new_dir).resolve()
+            new_dir = (self.config_dir / new_dir).resolve()
 
         if new_dir == self.app_data_dir:
             return
