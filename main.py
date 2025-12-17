@@ -31,6 +31,11 @@ def _set_app_icon(root: tk.Tk) -> None:
     # Windows titlebar/taskbar icon (when available)
     if sys.platform.startswith("win") and ico_path.is_file():
         try:
+            root.iconbitmap(str(ico_path))
+        except Exception:
+            pass
+        try:
+            # Also set as default for any Toplevel windows.
             root.iconbitmap(default=str(ico_path))
         except Exception:
             pass
