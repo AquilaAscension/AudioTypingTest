@@ -5,6 +5,7 @@ import os
 import sys
 import shutil
 import subprocess
+import wave
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -12,8 +13,10 @@ from scipy.signal import butter, lfilter
 
 try:
     from piper import PiperVoice
+    from piper.config import SynthesisConfig
 except ImportError:
     PiperVoice = None
+    SynthesisConfig = None
 
 class TTSManager:
     def __init__(self,
@@ -60,6 +63,7 @@ class TTSManager:
         self._piper_cmd = self._find_piper_cmd()
         self._embedded_voice = None
         self._use_embedded_voice = False
+        self._embedded_voice_error = None
         self._init_embedded_voice()
 
     # helpers 
@@ -70,7 +74,24 @@ class TTSManager:
         exe = shutil.which("piper")
         if exe:
             return [exe]
-        # Fallback if not on PATH:
+
+        # In frozen apps (PyInstaller, etc.), sys.executable is the app EXE and
+        # cannot run `-m piper`. Only use that fallback for non-frozen runs.
+        if getattr(sys, "frozen", False):
+            base_dir = self._resource_root()
+            exe_dir = os.path.dirname(sys.executable)
+            candidates = [
+                os.path.join(exe_dir, "piper"),
+                os.path.join(exe_dir, "piper.exe"),
+                os.path.join(base_dir, "piper"),
+                os.path.join(base_dir, "piper.exe"),
+            ]
+            for candidate in candidates:
+                if os.path.isfile(candidate):
+                    return [candidate]
+            return None
+
+        # Fallback if not on PATH (works for normal Python runs):
         return [sys.executable, "-m", "piper"]
 
     def _resolve_voice_paths(self, model_basename):
@@ -83,17 +104,26 @@ class TTSManager:
         return model_path, config_path
 
     def _init_embedded_voice(self):
+        self._embedded_voice_error = None
         if PiperVoice is None:
+            self._embedded_voice_error = "Python package `piper` is not available."
             return
         try:
-            with open(self.model_path, "rb") as model_file, open(self.config_path, "r", encoding="utf-8") as config_file:
-                self._embedded_voice = PiperVoice.load(model_file, config_file)
+            self._embedded_voice = PiperVoice.load(self.model_path, self.config_path)
             self._use_embedded_voice = True
-        except Exception:
+        except Exception as e:
+            self._embedded_voice_error = f"{type(e).__name__}: {e}"
             self._embedded_voice = None
             self._use_embedded_voice = False
 
     def _synthesize_with_cli(self, input_text, eff_scale):
+        if not self._piper_cmd:
+            detail = f"\nEmbedded init error: {self._embedded_voice_error}" if self._embedded_voice_error else ""
+            raise RuntimeError(
+                "Piper CLI not found, and embedded Piper voice is unavailable."
+                " Bundle `piper` with the executable or ensure embedded dependencies are included."
+                f"{detail}"
+            )
         cmd = (
             self._piper_cmd
             + ["--model", self.model_path,
@@ -117,14 +147,11 @@ class TTSManager:
             )
 
     def _synthesize_with_embedded(self, input_text, eff_scale):
-        if self._embedded_voice is None:
+        if self._embedded_voice is None or SynthesisConfig is None:
             raise RuntimeError("Embedded Piper voice unavailable.")
-        with open(self.wav_file, "wb") as wav_file:
-            self._embedded_voice.synthesize(
-                input_text,
-                wav_file,
-                length_scale=eff_scale
-            )
+        syn_config = SynthesisConfig(length_scale=eff_scale)
+        with wave.open(self.wav_file, "wb") as wav_file:
+            self._embedded_voice.synthesize_wav(input_text, wav_file, syn_config=syn_config)
 
     def _to_piper_scale(self, ui_speed: float) -> float:
         s = max(float(ui_speed), 1e-6)  # guard against zero/negatives

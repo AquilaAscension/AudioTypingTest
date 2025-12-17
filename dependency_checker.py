@@ -22,6 +22,32 @@ REQUIRED_LIBRARIES = {
 
 
 def ensure_dependencies_installed():
+    # In frozen executables (PyInstaller, etc.), runtime `pip install` is not
+    # available. Missing modules should be treated as a build/packaging error.
+    if getattr(sys, "frozen", False):
+        missing = []
+        for module_name in REQUIRED_LIBRARIES:
+            try:
+                importlib.import_module(module_name)
+            except ImportError:
+                missing.append(module_name)
+
+        if missing:
+            msg = (
+                "This executable is missing required dependencies and cannot self-install them:\n\n"
+                + "\n".join(f"- {name}" for name in missing)
+                + "\n\nRebuild the executable including these modules."
+            )
+            try:
+                root = Tk()
+                root.withdraw()
+                messagebox.showerror("Missing Dependencies", msg)
+                root.destroy()
+            except Exception:
+                print(msg, file=sys.stderr)
+            raise SystemExit(1)
+        return
+
     for module_name, pip_name in REQUIRED_LIBRARIES.items():
         try:
             importlib.import_module(module_name)
