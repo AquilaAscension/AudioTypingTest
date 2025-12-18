@@ -37,6 +37,7 @@ Output: `dist\\echoType.exe`
 ## Notes
 
 - If Windows Explorer still shows the old icon after rebuilding, try renaming the `.exe` or restarting Explorer (icon cache).
+- If you pinned the app to the taskbar/Start menu, unpin and pin again (shortcuts cache icons).
 - User-writable files are stored outside the executable:
   - Config: `$XDG_CONFIG_HOME/echoType/config.json` (Linux), `%APPDATA%\\echoType\\config.json` (Windows).
   - App data (scores, generated audio): `$XDG_DATA_HOME/echoType/` (Linux), `%LOCALAPPDATA%\\echoType\\` (Windows).

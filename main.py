@@ -6,6 +6,10 @@ import sys
 if sys.platform == "win32":
     import ctypes
     try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("echoType.echoType")
+    except Exception:
+        pass
+    try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
         pass
@@ -30,15 +34,22 @@ def _set_app_icon(root: tk.Tk) -> None:
 
     # Windows titlebar/taskbar icon (when available)
     if sys.platform.startswith("win") and ico_path.is_file():
+        ico_set = False
         try:
             root.iconbitmap(str(ico_path))
+            ico_set = True
         except Exception:
             pass
         try:
             # Also set as default for any Toplevel windows.
             root.iconbitmap(default=str(ico_path))
+            ico_set = True
         except Exception:
             pass
+        # If we successfully set an .ico on Windows, avoid overriding it with iconphoto()
+        # (which can leave the taskbar icon unchanged on some Tk builds).
+        if ico_set:
+            return
 
     # Cross-platform icon (requires a PNG)
     if png_path.is_file():

@@ -75,7 +75,10 @@ except Exception:
 
 app_icon = None
 if sys.platform.startswith("win"):
-    app_icon = _optional_file(project_root / "icons" / "echoType.ico")
+    _win_icon_path = project_root / "icons" / "echoType.ico"
+    app_icon = _optional_file(_win_icon_path)
+    if app_icon is None:
+        raise SystemExit(f"Missing Windows icon file: {_win_icon_path}")
 elif sys.platform == "darwin":
     app_icon = _optional_file(project_root / "icons" / "echoType.icns")
 
