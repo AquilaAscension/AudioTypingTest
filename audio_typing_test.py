@@ -106,13 +106,19 @@ class AudioTypingTest:
         self.fonts = NEUMORPH_FONTS
         self.play_symbol = ">"
         self.pause_symbol = "||"
-        self.icon_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "icons"
+        self.runtime_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+        self.icon_dir = self.runtime_dir / "icons"
         self.icon_images = {}
         self.icon_scale = ICON_SCALE
         self._init_neumorphic_theme()
 
-        self.runtime_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-        self.config_path = self.runtime_dir / "config.json"
+        self.config_dir = self.default_config_dir()
+        try:
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # Last resort: fall back to runtime dir (may be temporary in onefile builds)
+            self.config_dir = self.runtime_dir
+        self.config_path = self.config_dir / "config.json"
         self.app_data_dir = self.load_app_data_dir()
         self.details_dir = self.app_data_dir / "Details"
         self.generations_dir = self.app_data_dir / "Generations"
@@ -480,13 +486,27 @@ class AudioTypingTest:
             btn.configure(style=style)
 
     # Configuration and path utilities
-    def default_app_data_dir(self):
+    def default_config_dir(self):
+        app_name = "echoType"
         plat = sys.platform
         if plat.startswith("win"):
-            return Path("C:/Program Files/echoType")
+            base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+            return Path(base) / app_name
         if plat == "darwin":
-            return Path("/Applications/echoType")
-        return Path("/usr/bin/echoType")
+            return Path.home() / "Library" / "Application Support" / app_name
+        base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+        return Path(base) / app_name
+
+    def default_app_data_dir(self):
+        app_name = "echoType"
+        plat = sys.platform
+        if plat.startswith("win"):
+            base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Local")
+            return Path(base) / app_name
+        if plat == "darwin":
+            return Path.home() / "Library" / "Application Support" / app_name
+        base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+        return Path(base) / app_name
 
     def load_config(self):
         if self.config_path.exists():
@@ -561,16 +581,21 @@ class AudioTypingTest:
         if configured:
             candidate = Path(configured).expanduser()
             if not candidate.is_absolute():
-                candidate = (self.runtime_dir / candidate).resolve()
+                candidate = (self.config_dir / candidate).resolve()
         else:
             candidate = self.default_app_data_dir()
         try:
             candidate.mkdir(parents=True, exist_ok=True)
             return candidate
         except Exception:
-            fallback = self.runtime_dir / "echoType_data"
-            fallback.mkdir(parents=True, exist_ok=True)
-            return fallback
+            fallback = self.default_app_data_dir()
+            try:
+                fallback.mkdir(parents=True, exist_ok=True)
+                return fallback
+            except Exception:
+                fallback = self.runtime_dir / "echoType_data"
+                fallback.mkdir(parents=True, exist_ok=True)
+                return fallback
 
     def ensure_app_dirs(self):
         for path in [self.app_data_dir, self.details_dir, self.generations_dir]:
@@ -649,7 +674,7 @@ class AudioTypingTest:
     def update_app_data_dir(self, new_dir: Path):
         new_dir = Path(new_dir).expanduser()
         if not new_dir.is_absolute():
-            new_dir = (self.runtime_dir / new_dir).resolve()
+            new_dir = (self.config_dir / new_dir).resolve()
 
         if new_dir == self.app_data_dir:
             return
@@ -870,27 +895,28 @@ class AudioTypingTest:
             orient="vertical",
             command=self.settings_canvas.yview
         )
-        self.settings_scrollbar.grid(row=0, column=1, sticky="ns") # Place scrollbar next to canvas
+        self.settings_scrollbar.grid(row=0, column=1, sticky="ns")
         self.settings_canvas.configure(yscrollcommand=self.settings_scrollbar.set)
-        self.sidebar = ttk.Frame(self.settings_canvas,style="TFrame")
+
+        self.sidebar = tk.Frame(self.settings_canvas, bg=self.colors["bg"])
         self.sidebar.columnconfigure(0, weight=1)
         self.settings_canvas_window = self.settings_canvas.create_window(
-            (0, 0), 
-            window=self.sidebar, 
-            anchor="nw", 
-            tags="settings_content_frame"
+            (0, 0),
+            window=self.sidebar,
+            anchor="nw"
         )
+
         self.sidebar.bind(
-            "<Configure>", 
+            "<Configure>",
             lambda e: self.settings_canvas.configure(
                 scrollregion=self.settings_canvas.bbox("all")
             )
         )
 
         self.settings_canvas.bind(
-            "<Configure>", 
+            "<Configure>",
             lambda e: self.settings_canvas.itemconfigure(
-                self.settings_canvas_window, 
+                self.settings_canvas_window,
                 width=e.width
             )
         )
@@ -1217,10 +1243,47 @@ class AudioTypingTest:
 
         body_card, body = self._build_card(dialog, padding=14)
         body_card.pack(fill="both", expand=True, padx=16, pady=16)
-        body.columnconfigure(0, weight=1)
+
+        config_canvas = tk.Canvas(
+            body,
+            bg=self.colors["bg"],
+            highlightthickness=0
+        )
+        config_canvas.pack(side="left", fill="both", expand=True)
+
+        config_scrollbar = ttk.Scrollbar(
+            body,
+            orient="vertical",
+            command=config_canvas.yview
+        )
+        config_scrollbar.pack(side="right", fill="y")
+        config_canvas.configure(yscrollcommand=config_scrollbar.set)
+
+        config_content = tk.Frame(config_canvas, bg=self.colors["bg"])
+        config_content.columnconfigure(0, weight=1)
+        config_canvas_window = config_canvas.create_window(
+            (0, 0),
+            window=config_content,
+            anchor="nw"
+        )
+
+        config_content.bind(
+            "<Configure>",
+            lambda e: config_canvas.configure(
+                scrollregion=config_canvas.bbox("all")
+            )
+        )
+
+        config_canvas.bind(
+            "<Configure>",
+            lambda e: config_canvas.itemconfigure(
+                config_canvas_window,
+                width=e.width
+            )
+        )
 
         # Application data directory section
-        data_frame = tk.LabelFrame(body, text="Application Data Directory", bg=self.colors["bg"], fg=self.colors["text"])
+        data_frame = tk.LabelFrame(config_content, text="Application Data Directory", bg=self.colors["bg"], fg=self.colors["text"])
         data_frame.pack(fill="x", padx=4, pady=6)
 
         dir_var = tk.StringVar(value=str(self.app_data_dir))
@@ -1250,7 +1313,7 @@ class AudioTypingTest:
         ttk.Button(data_frame, text="Save Directory", style="NeumoAccent.TButton", command=save_dir).grid(row=1, column=1, padx=10, pady=(0, 10), sticky="e")
 
         # Admin management section
-        admin_frame = tk.LabelFrame(body, text="Admin Management", bg=self.colors["bg"], fg=self.colors["text"])
+        admin_frame = tk.LabelFrame(config_content, text="Admin Management", bg=self.colors["bg"], fg=self.colors["text"])
         admin_frame.pack(fill="x", padx=4, pady=6)
 
         admin_user_var = tk.StringVar()
@@ -1277,7 +1340,7 @@ class AudioTypingTest:
         ttk.Button(admin_frame, text="Grant Admin", style="Neumo.TButton", command=grant_admin).grid(row=0, column=1, padx=10, pady=5, sticky="e")
 
         # Reset password section
-        reset_frame = tk.LabelFrame(body, text="Reset User Password (requires current user password)", bg=self.colors["bg"], fg=self.colors["text"])
+        reset_frame = tk.LabelFrame(config_content, text="Reset User Password (requires current user password)", bg=self.colors["bg"], fg=self.colors["text"])
         reset_frame.pack(fill="x", padx=4, pady=6)
 
         reset_user_var = tk.StringVar()
@@ -1343,7 +1406,7 @@ class AudioTypingTest:
         ttk.Button(reset_frame, text="Reset Password", style="NeumoAccent.TButton", command=handle_reset_password).grid(row=4, column=1, padx=10, pady=(5, 10), sticky="e")
 
         # User deletion section
-        user_frame = tk.LabelFrame(body, text="Delete User and Data (requires current user password)", bg=self.colors["bg"], fg=self.colors["text"])
+        user_frame = tk.LabelFrame(config_content, text="Delete User and Data (requires current user password)", bg=self.colors["bg"], fg=self.colors["text"])
         user_frame.pack(fill="both", padx=4, pady=6, expand=True)
 
         ttk.Label(user_frame, text="Select User:", style="Muted.TLabel").grid(row=0, column=0, padx=10, pady=5, sticky="w")
@@ -1410,7 +1473,7 @@ class AudioTypingTest:
         ttk.Button(user_frame, text="Delete User", style="NeumoDanger.TButton", command=handle_delete_user).grid(row=2, column=0, columnspan=2, padx=10, pady=(5, 10))
 
         # Delete all data section
-        all_frame = tk.LabelFrame(body, text="Delete All Application Data (requires current user password)", bg=self.colors["bg"], fg=self.colors["text"])
+        all_frame = tk.LabelFrame(config_content, text="Delete All Application Data (requires current user password)", bg=self.colors["bg"], fg=self.colors["text"])
         all_frame.pack(fill="x", padx=4, pady=6)
 
         confirm_pwd = tk.StringVar()
@@ -1438,7 +1501,7 @@ class AudioTypingTest:
         ttk.Button(all_frame, text="Delete All Data", style="NeumoDanger.TButton", command=handle_delete_all).grid(row=2, column=0, columnspan=2, padx=10, pady=(5, 10))
 
         # Backup / Transfer section
-        backup_frame = tk.LabelFrame(body, text="Backup / Transfer", bg=self.colors["bg"], fg=self.colors["text"])
+        backup_frame = tk.LabelFrame(config_content, text="Backup / Transfer", bg=self.colors["bg"], fg=self.colors["text"])
         backup_frame.pack(fill="x", padx=4, pady=6)
         ttk.Button(backup_frame, text="Export Data", style="Neumo.TButton", command=self.trigger_export).grid(row=0, column=0, padx=10, pady=6, sticky="w")
         ttk.Button(backup_frame, text="Import Data", style="Neumo.TButton", command=self.trigger_import).grid(row=0, column=1, padx=10, pady=6, sticky="w")

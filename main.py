@@ -6,22 +6,64 @@ import sys
 if sys.platform == "win32":
     import ctypes
     try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("echoType.echoType")
+    except Exception:
+        pass
+    try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
         pass
     
-from dependency_checker import ensure_dependencies_installed
-ensure_dependencies_installed()
+#from dependency_checker import ensure_dependencies_installed
+#ensure_dependencies_installed()
 
 
 import atexit
 import signal
+from pathlib import Path
 import tkinter as tk
 import tkinter.ttk as ttk
 from audio_typing_test import AudioTypingTest
 
+def _set_app_icon(root: tk.Tk) -> None:
+    base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    icon_dir = base_dir / "icons"
+
+    ico_path = icon_dir / "echoType.ico"
+    png_path = icon_dir / "echoType.png"
+
+    # Windows titlebar/taskbar icon (when available)
+    if sys.platform.startswith("win") and ico_path.is_file():
+        ico_set = False
+        try:
+            root.iconbitmap(str(ico_path))
+            ico_set = True
+        except Exception:
+            pass
+        try:
+            # Also set as default for any Toplevel windows.
+            root.iconbitmap(default=str(ico_path))
+            ico_set = True
+        except Exception:
+            pass
+        # If we successfully set an .ico on Windows, avoid overriding it with iconphoto()
+        # (which can leave the taskbar icon unchanged on some Tk builds).
+        if ico_set:
+            return
+
+    # Cross-platform icon (requires a PNG)
+    if png_path.is_file():
+        try:
+            img = tk.PhotoImage(file=str(png_path))
+            root.iconphoto(True, img)
+            # Keep a reference to prevent garbage collection.
+            root._echotype_icon = img  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
 if __name__ == "__main__":
     root = tk.Tk()
+    _set_app_icon(root)
     try:
         root.state("zoomed")
     except tk.TclError:

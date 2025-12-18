@@ -8,3 +8,7 @@ voices/
 .venv/
 echoType_data/
 typing_test_scores.csv
+dist/
+build/
+__pycache__/
+config.json
